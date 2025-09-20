@@ -1,0 +1,5 @@
+Strategy,Cost_total_sum,Cost_total_mean,Cost_total_std,Import_total_sum,Import_total_mean,Export_total_sum,Export_total_mean,PV_total_sum,PV_total_mean,Load_total_sum,Load_total_mean,pv_self_sum,pv_self_mean,SCR_mean,SCR_std,SelfSufficiency_mean,SelfSufficiency_std,PeakGrid_mean,PeakGrid_max,BatteryCycles_sum,BatteryCycles_mean,Cost_improvement_pct
+DRP2P,894.43,447.21,0.0,2474.69,1237.34,0.0,0.0,1.23,0.62,2450.59,1225.29,1.23,0.62,1.0,0.0,0.04,0.0,121.25,121.25,0.68,0.34,34.95
+MMR,923.72,461.86,0.0,550.82,275.41,0.0,0.0,1.23,0.62,2450.59,1225.29,1.23,0.62,1.0,0.0,0.07,0.0,99.33,99.33,1.08,0.54,32.82
+MSC,1374.97,458.32,0.0,3712.03,1237.34,0.0,0.0,1.85,0.62,3675.88,1225.29,1.85,0.62,1.0,0.0,0.04,0.0,110.23,110.23,1.01,0.34,0.0
+TOU,916.65,458.32,0.0,2474.69,1237.34,0.0,0.0,1.23,0.62,2450.59,1225.29,1.23,0.62,1.0,0.0,0.04,0.0,110.23,110.23,0.68,0.34,33.33

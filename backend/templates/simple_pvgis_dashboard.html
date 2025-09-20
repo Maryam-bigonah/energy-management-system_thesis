@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌞 Real PVGIS Data Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .status-banner {
+            background: #27ae60;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            font-weight: bold;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .metric {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+        }
+        
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #2980b9;
+            margin-bottom: 5px;
+        }
+        
+        .metric-label {
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #2980b9;
+        }
+        
+        .btn.active {
+            background: #e74c3c;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #7f8c8d;
+            font-style: italic;
+            padding: 20px;
+        }
+        
+        .error {
+            color: #e74c3c;
+            background: #fdf2f2;
+            border: 1px solid #e74c3c;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            color: #27ae60;
+            background: #f0f9f0;
+            border: 1px solid #27ae60;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌞 Real PVGIS Data Dashboard</h1>
+            <p>Real-time PV Performance Analysis for Turin, Italy</p>
+        </div>
+        
+        <div class="status-banner">
+            ✅ REAL PVGIS DATA - 100% REAL SOURCES
+        </div>
+        
+        <div class="dashboard-grid">
+            <!-- PV Performance Summary -->
+            <div class="card full-width">
+                <h2>📊 PV Performance Summary</h2>
+                <div id="performance-summary" class="loading">Loading performance data...</div>
+            </div>
+            
+            <!-- Hourly PV Generation -->
+            <div class="card">
+                <h2>⚡ Hourly PV Generation</h2>
+                <div class="controls">
+                    <button class="btn active" onclick="loadHourlyChart('24h')">24 Hours</button>
+                    <button class="btn" onclick="loadHourlyChart('8760h')">Full Year</button>
+                </div>
+                <div class="chart-container">
+                    <canvas id="hourlyChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Monthly PV Generation -->
+            <div class="card">
+                <h2>📅 Monthly PV Generation</h2>
+                <div class="chart-container">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Data Source Info -->
+            <div class="card full-width">
+                <h2>🔗 Data Source Information</h2>
+                <div id="data-source-info" class="loading">Loading data source information...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Chart instances
+        const charts = {};
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPerformanceSummary();
+            loadHourlyChart('24h');
+            loadMonthlyChart();
+            loadDataSourceInfo();
+        });
+
+        // Load PV performance summary
+        async function loadPerformanceSummary() {
+            try {
+                const response = await fetch('/api/pvgis/summary');
+                const data = await response.json();
+                
+                if (data.error) {
+                    document.getElementById('performance-summary').innerHTML = 
+                        `<div class="error">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                const summaryHTML = `
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <div class="metric-value">${data.daily_generation_kwh}</div>
+                            <div class="metric-label">Daily Generation (kWh)</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${data.peak_power_kw}</div>
+                            <div class="metric-label">Peak Power (kW)</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${data.peak_hour}:00</div>
+                            <div class="metric-label">Peak Time</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${data.data_source}</div>
+                            <div class="metric-label">Data Source</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${data.location}</div>
+                            <div class="metric-label">Location</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${data.years}</div>
+                            <div class="metric-label">Years</div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('performance-summary').innerHTML = summaryHTML;
+                
+            } catch (error) {
+                console.error('Error loading performance summary:', error);
+                document.getElementById('performance-summary').innerHTML = 
+                    '<div class="error">Error loading performance summary</div>';
+            }
+        }
+
+        // Load hourly chart
+        async function loadHourlyChart(period) {
+            try {
+                const response = await fetch(`/api/pvgis/data?period=${period}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    document.getElementById('hourlyChart').closest('.card').innerHTML = 
+                        `<div class="error">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                const ctx = document.getElementById('hourlyChart').getContext('2d');
+                if (charts.hourly) {
+                    charts.hourly.destroy();
+                }
+                
+                charts.hourly = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.hours,
+                        datasets: [{
+                            label: data.label,
+                            data: data.values,
+                            borderColor: '#f39c12',
+                            backgroundColor: 'rgba(243, 156, 18, 0.2)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'PV Generation (kW)'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: period === '24h' ? 'Hour of Day' : 'Hour of Year'
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Update button states
+                document.querySelectorAll('.controls .btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                event.target.classList.add('active');
+                
+            } catch (error) {
+                console.error('Error loading hourly chart:', error);
+            }
+        }
+
+        // Load monthly chart
+        async function loadMonthlyChart() {
+            try {
+                const response = await fetch('/api/pvgis/monthly');
+                const data = await response.json();
+                
+                if (data.error) {
+                    document.getElementById('monthlyChart').closest('.card').innerHTML = 
+                        `<div class="error">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                const ctx = document.getElementById('monthlyChart').getContext('2d');
+                if (charts.monthly) {
+                    charts.monthly.destroy();
+                }
+                
+                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                
+                charts.monthly = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => monthNames[d.month - 1]),
+                        datasets: [{
+                            label: 'Monthly Generation (kWh)',
+                            data: data.map(d => d.generation_kwh),
+                            backgroundColor: 'rgba(52, 152, 219, 0.8)',
+                            borderColor: '#3498db',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Generation (kWh)'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Month'
+                                }
+                            }
+                        }
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Error loading monthly chart:', error);
+            }
+        }
+
+        // Load data source info
+        async function loadDataSourceInfo() {
+            try {
+                const response = await fetch('/api/pvgis/status');
+                const data = await response.json();
+                
+                if (data.error) {
+                    document.getElementById('data-source-info').innerHTML = 
+                        `<div class="error">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                const infoHTML = `
+                    <div class="success">
+                        <h3>✅ Real PVGIS Data Successfully Loaded</h3>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-value">${data.data_loaded ? '✅' : '❌'}</div>
+                                <div class="metric-label">Data Loaded</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${data.data_source}</div>
+                                <div class="metric-label">Data Source</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${data.location}</div>
+                                <div class="metric-label">Location</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${data.coordinates}</div>
+                                <div class="metric-label">Coordinates</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${data.years}</div>
+                                <div class="metric-label">Years</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${data.database}</div>
+                                <div class="metric-label">Database</div>
+                            </div>
+                        </div>
+                        ${data.data_loaded ? `
+                            <p><strong>Data Details:</strong></p>
+                            <ul>
+                                <li>24h Records: ${data.total_records_24h || 'N/A'}</li>
+                                <li>8760h Records: ${data.total_records_8760h || 'N/A'}</li>
+                                <li>Daily Generation: ${data.daily_generation_kwh ? data.daily_generation_kwh.toFixed(2) + ' kWh' : 'N/A'}</li>
+                            </ul>
+                        ` : ''}
+                    </div>
+                `;
+                
+                document.getElementById('data-source-info').innerHTML = infoHTML;
+                
+            } catch (error) {
+                console.error('Error loading data source info:', error);
+                document.getElementById('data-source-info').innerHTML = 
+                    '<div class="error">Error loading data source information</div>';
+            }
+        }
+    </script>
+</body>
+</html>
+

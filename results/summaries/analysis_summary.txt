@@ -1,0 +1,27 @@
+ENERGY MANAGEMENT SYSTEM - STRATEGY ANALYSIS SUMMARY
+============================================================
+
+ANNUAL STRATEGY COMPARISON
+------------------------------
+Best Strategy: DRP2P
+Worst Strategy: MSC
+Best Cost Improvement: 34.95%
+
+STATISTICAL SIGNIFICANCE
+-------------------------
+MSC vs TOU: p=nan, Effect Size=Small
+MSC vs MMR: p=0.0000, Effect Size=Large
+MSC vs DRP2P: p=0.0000, Effect Size=Large
+
+SEASONAL INSIGHTS
+------------------
+Spring: Best strategy = DRP2P
+Winter: Best strategy = DRP2P
+Autumn: Best strategy = TOU
+Summer: Best strategy = MSC
+
+FILES GENERATED
+---------------
+Summaries: results/summaries/
+Figures: results/figs/
+Log: analysis.log
