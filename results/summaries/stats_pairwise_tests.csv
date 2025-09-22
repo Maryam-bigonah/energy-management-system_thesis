@@ -1,4 +1,0 @@
-Comparison,Mean_Difference,CI_Lower,CI_Upper,T_Statistic,T_P_Value,Wilcoxon_Statistic,Wilcoxon_P_Value,Cohens_D,Effect_Size
-MSC vs TOU,0.0,0.0,0.0,,,0.0,1.0,,Small
-MSC vs MMR,-3.535,-3.535,-3.535,-inf,0.0,0.0,0.5,-inf,Large
-MSC vs DRP2P,11.111,11.111,11.111,inf,0.0,0.0,0.5,inf,Large

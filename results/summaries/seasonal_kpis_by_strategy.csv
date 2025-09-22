@@ -1,9 +1,0 @@
-Strategy,season_label,Cost_total_mean,Cost_total_std,Import_total_mean,Import_total_std,Export_total_mean,Export_total_std,SCR_mean,SCR_std,SelfSufficiency_mean,SelfSufficiency_std,PeakGrid_mean,PeakGrid_std,BatteryCycles_mean,BatteryCycles_std
-DRP2P,Spring,447.213,,1237.345,,0.0,,1.0,,0.045,,121.249,,0.338,
-DRP2P,Winter,447.213,,1237.345,,0.0,,1.0,,0.045,,121.249,,0.338,
-MMR,Autumn,461.86,,275.412,,0.0,,1.0,,0.071,,99.331,,0.54,
-MMR,Spring,461.86,,275.412,,0.0,,1.0,,0.071,,99.331,,0.54,
-MSC,Summer,458.324,0.0,1237.345,0.0,0.0,0.0,1.0,0.0,0.045,0.0,110.226,0.0,0.338,0.0
-MSC,Winter,458.324,,1237.345,,0.0,,1.0,,0.045,,110.226,,0.338,
-TOU,Autumn,458.324,,1237.345,,0.0,,1.0,,0.045,,110.226,,0.338,
-TOU,Winter,458.324,,1237.345,,0.0,,1.0,,0.045,,110.226,,0.338,

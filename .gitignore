@@ -1,58 +1,30 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
 # Virtual environments
+.venv/
 venv/
-env/
-ENV/
-env.bak/
-venv.bak/
+.env
+.env.local
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python distribution / packaging
+build/
+dist/
+*.egg-info/
 
 # OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
 
-# Project specific
-results/hourly/
-results/figs/
-results/figs_forecast/
-models/
-forecast/
-*.log
+# Node
+node_modules/
 
-# Temporary files
-temp_*
-*.tmp
-*.temp
+# Editor
+.vscode/
+.idea/

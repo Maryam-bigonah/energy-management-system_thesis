@@ -1,0 +1,26 @@
+# Torino Energy configuration
+project:
+  name: torino_energy
+  version: 0.1.0
+
+paths:
+  data_dir: ./data
+  cache_dir: ./cache
+
+sources:
+  pvgis:
+    enabled: true
+  lpg:
+    enabled: true
+  tariffs:
+    enabled: true
+  gme_gse:
+    enabled: true
+  osm_roofs:
+    enabled: true
+
+transform:
+  time_align:
+    frequency: 1H
+  validation:
+    required_fields: []
