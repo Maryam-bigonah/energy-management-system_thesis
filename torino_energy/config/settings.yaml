@@ -12,6 +12,66 @@ sources:
     enabled: true
   lpg:
     enabled: true
+    timezone: Europe/Rome
+    archetypes:
+      - couple_working
+      - family_one_child
+      - one_works_one_home
+      - retired_couple
+    files:
+      couple_working: ./data/lpg/couple_working.csv
+      family_one_child: ./data/lpg/family_one_child.csv
+      one_works_one_home: ./data/lpg/one_works_one_home.csv
+      retired_couple: ./data/lpg/retired_couple.csv
+    units:
+      # 20 total units in a 5/5/5/5 split
+      - couple_working
+      - couple_working
+      - couple_working
+      - couple_working
+      - couple_working
+      - family_one_child
+      - family_one_child
+      - family_one_child
+      - family_one_child
+      - family_one_child
+      - one_works_one_home
+      - one_works_one_home
+      - one_works_one_home
+      - one_works_one_home
+      - one_works_one_home
+      - retired_couple
+      - retired_couple
+      - retired_couple
+      - retired_couple
+      - retired_couple
+    appliance_category_map:
+      # Map LPG appliance names to categories
+      # Adjust names to match your LPG CSV headers
+      base:
+        - Base Load
+        - Plug Load
+      hvac:
+        - HVAC
+        - Heating
+        - Cooling
+      kitchen:
+        - Kitchen
+        - Fridge
+        - Dishwasher
+        - Oven
+        - Microwave
+      laundry:
+        - Laundry
+        - Washing Machine
+        - Dryer
+      entertain:
+        - Entertainment
+        - TV
+        - Computer
+      misc:
+        - Lighting
+        - Other
   tariffs:
     enabled: true
   gme_gse:
