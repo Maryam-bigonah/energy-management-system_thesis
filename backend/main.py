@@ -24,6 +24,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from torino_energy.data_sources.osm_roofs import OSMBuildingProcessor
 from torino_energy.data_sources.pvgis_integration import BuildingSolarAnalyzer
+from custom_analysis import router as custom_router
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -44,6 +45,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include custom analysis router
+app.include_router(custom_router, prefix="/api/v1", tags=["Custom Analysis"])
 
 # Global variables for data processors
 building_processor = None

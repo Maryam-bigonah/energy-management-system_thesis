@@ -11,6 +11,7 @@ import BuildingsList from './pages/BuildingsList';
 import BuildingDetails from './pages/BuildingDetails';
 import Statistics from './pages/Statistics';
 import MapView from './pages/MapView';
+import CustomAnalysis from './pages/CustomAnalysis';
 
 // Create theme
 const theme = createTheme({
@@ -60,6 +61,7 @@ function App() {
               <Route path="/buildings/:buildingId" element={<BuildingDetails />} />
               <Route path="/statistics" element={<Statistics />} />
               <Route path="/map" element={<MapView />} />
+              <Route path="/custom-analysis" element={<CustomAnalysis />} />
             </Routes>
           </Box>
         </Box>

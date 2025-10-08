@@ -12,6 +12,7 @@ import {
   Business,
   Analytics,
   Map,
+  Settings,
   Menu as MenuIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -25,6 +26,7 @@ const Navbar = () => {
     { label: 'Buildings', path: '/buildings', icon: <Business /> },
     { label: 'Statistics', path: '/statistics', icon: <Analytics /> },
     { label: 'Map View', path: '/map', icon: <Map /> },
+    { label: 'Custom Analysis', path: '/custom-analysis', icon: <Settings /> },
   ];
 
   return (
