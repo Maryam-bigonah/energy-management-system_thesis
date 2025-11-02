@@ -1,61 +1,47 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor
-api.interceptors.request.use(
-  (config) => {
-    console.log(`Making API request to: ${config.url}`);
-    return config;
-  },
-  (error) => {
-    console.error('Request error:', error);
-    return Promise.reject(error);
-  }
-);
+export const healthCheck = () => api.get('/health');
 
-// Response interceptor
-api.interceptors.response.use(
-  (response) => {
-    console.log(`API response from: ${response.config.url}`, response.status);
-    return response;
-  },
-  (error) => {
-    console.error('Response error:', error.response?.data || error.message);
-    return Promise.reject(error);
-  }
-);
+export const loadSampleData = (startDate = '2023-01-01', endDate = '2023-12-31') =>
+  api.post('/data/load-sample', { start_date: startDate, end_date: endDate });
 
-// API endpoints
-export const apiService = {
-  // Buildings
-  getBuildings: (params = {}) => api.get('/buildings', { params }),
-  getBuilding: (buildingId) => api.get(`/buildings/${buildingId}`),
-  getSolarAnalysis: (buildingId, technology = 'mono_crystalline', roofArea = null) => {
-    const params = { technology };
-    if (roofArea) params.roof_area = roofArea;
-    return api.get(`/buildings/${buildingId}/solar-analysis`, { params });
-  },
-  getTechnologyComparison: (buildingId) => 
-    api.get(`/buildings/${buildingId}/technology-comparison`),
-
-  // Statistics
-  getStatistics: () => api.get('/statistics'),
-
-  // Plot data
-  getRoofAreaDistribution: () => api.get('/plot-data/roof-area-distribution'),
-  getSolarPotentialData: () => api.get('/plot-data/solar-potential'),
-
-  // Health check
-  healthCheck: () => api.get('/'),
+export const uploadData = (pvFile, loadFile) => {
+  const formData = new FormData();
+  formData.append('pv_file', pvFile);
+  formData.append('load_file', loadFile);
+  return api.post('/data/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
 };
 
+export const getHistoricalData = (startDate, endDate, limit = 1000) =>
+  api.get('/data/historical', {
+    params: { start_date: startDate, end_date: endDate, limit },
+  });
+
+export const trainModel = (epochs = 50, batchSize = 32, validationSplit = 0.2) =>
+  api.post('/model/train', {
+    epochs,
+    batch_size: batchSize,
+    validation_split: validationSplit,
+  });
+
+export const getPredictions = (hours = 168) =>
+  api.post('/model/predict', { hours });
+
+export const getMetrics = () => api.get('/model/metrics');
+
+export const forecastNextHour = () => api.get('/model/forecast-next');
+
 export default api;
+
+

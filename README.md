@@ -1,237 +1,254 @@
-# 🌞 Torino Solar Building Analysis
+# LSTM Energy Forecasting - Full Stack Application
 
-A full-stack web application for analyzing solar energy potential of buildings in Torino, Italy. This application provides interactive visualizations, detailed solar analysis, and technology comparisons for residential and commercial buildings.
+This project implements a complete full-stack application for energy forecasting using LSTM neural networks. It includes a Flask backend API and a React frontend with interactive visualizations.
 
-## 🚀 Features
+## 🏗️ Project Structure
 
-- **Interactive Dashboard**: Overview of solar potential across all buildings
-- **Building Directory**: Searchable and filterable list of buildings
-- **Detailed Analysis**: Individual building solar energy calculations using PVGIS
-- **Technology Comparison**: Compare different solar cell technologies
-- **Interactive Map**: Visual representation of buildings and their solar potential
-- **Statistics & Analytics**: Comprehensive data visualization and insights
+```
+.
+├── backend/                  # Flask API server
+│   ├── app.py               # Main Flask application
+│   ├── requirements.txt     # Python dependencies
+│   └── Dockerfile          # Backend Docker image
+├── frontend/                # React frontend
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   ├── pages/          # Page components
+│   │   └── services/       # API services
+│   ├── package.json        # Node dependencies
+│   └── Dockerfile         # Frontend Docker image
+├── lstm_energy_forecast.py # LSTM model implementation
+├── data_loader.py          # Data loading utilities
+├── docker-compose.yml      # Docker Compose configuration
+└── README.md              # This file
+```
 
-## 🏗️ Architecture
+## ✨ Features
 
-### Backend (FastAPI)
-- RESTful API for building data and solar analysis
-- PVGIS integration for accurate solar calculations
-- Building data processing and validation
-- Technology comparison algorithms
+### Backend (Flask API)
+- **Data Management**: Load sample data or upload CSV files from PVGIS and Load Profile Generator
+- **Model Training**: Train LSTM model with configurable hyperparameters
+- **Forecasting**: Generate predictions for next hour or multiple hours
+- **Metrics**: Get model performance metrics (MAE, RMSE, R², MAPE)
+- **RESTful API**: All endpoints follow REST conventions
 
 ### Frontend (React)
-- Modern, responsive UI with Material-UI
-- Interactive charts and visualizations
-- Map integration with Leaflet
-- Real-time data filtering and search
+- **Dashboard**: Visualize historical load and PV generation data
+- **Training Page**: Train models with real-time progress and metrics
+- **Forecasts Page**: Compare predictions vs actual values with interactive charts
+- **Real-time Updates**: Live metrics and model status
+- **Responsive Design**: Works on desktop and mobile devices
 
-## 📁 Project Structure
+## 🚀 Quick Start
 
-```
-├── backend/                 # FastAPI backend
-│   ├── main.py             # Main API application
-│   └── requirements.txt    # Python dependencies
-├── frontend/               # React frontend
-│   ├── src/
-│   │   ├── components/     # Reusable UI components
-│   │   ├── pages/          # Page components
-│   │   ├── services/       # API service layer
-│   │   └── App.js          # Main application
-│   ├── public/             # Static assets
-│   └── package.json        # Node.js dependencies
-├── torino_energy/          # Core data processing modules
-│   └── data_sources/
-│       ├── osm_roofs.py           # OSM building data processor
-│       └── pvgis_integration.py   # PVGIS solar analysis
-├── building_solar_analysis.py     # Interactive CLI tool
-├── demo_building_analysis.py      # Demo script
-├── example_building_analysis.py   # Example usage
-├── processed_building_data.csv    # Sample building data
-└── requirements.txt               # Python dependencies
+### Option 1: Using Docker (Recommended)
+
+1. **Build and run with Docker Compose**:
+```bash
+docker-compose up --build
 ```
 
-## 🛠️ Installation & Setup
+2. **Access the application**:
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:5000
 
-### Prerequisites
-- Python 3.8+
-- Node.js 16+
-- npm or yarn
+### Option 2: Manual Setup
 
-### Backend Setup
+#### Backend Setup
 
-1. Navigate to the backend directory:
+1. **Navigate to backend directory**:
 ```bash
 cd backend
 ```
 
-2. Create a virtual environment:
+2. **Create virtual environment**:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-3. Install dependencies:
+3. **Install dependencies**:
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Run the backend server:
+4. **Run the Flask server**:
 ```bash
-python main.py
+python app.py
 ```
 
-The API will be available at `http://localhost:8000`
+The backend will run on http://localhost:5000
 
-### Frontend Setup
+#### Frontend Setup
 
-1. Navigate to the frontend directory:
+1. **Navigate to frontend directory**:
 ```bash
 cd frontend
 ```
 
-2. Install dependencies:
+2. **Install dependencies**:
 ```bash
 npm install
 ```
 
-3. Start the development server:
+3. **Run the development server**:
 ```bash
 npm start
 ```
 
-The application will be available at `http://localhost:3000`
+The frontend will run on http://localhost:3000
 
-## 🐳 Docker Deployment
+## 📡 API Endpoints
 
-### Using Docker Compose (Recommended)
+### Data Endpoints
+- `GET /api/health` - Health check and model status
+- `POST /api/data/load-sample` - Load sample Torino data
+- `POST /api/data/upload` - Upload CSV files (PV and Load)
+- `GET /api/data/historical` - Get historical data for visualization
 
-1. Create a `docker-compose.yml` file in the project root:
-```yaml
-version: '3.8'
-services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    environment:
-      - PYTHONPATH=/app
-    volumes:
-      - ./torino_energy:/app/torino_energy
-      - ./processed_building_data.csv:/app/processed_building_data.csv
+### Model Endpoints
+- `POST /api/model/train` - Train the LSTM model
+- `POST /api/model/predict` - Get predictions for N hours
+- `GET /api/model/metrics` - Get model performance metrics
+- `GET /api/model/forecast-next` - Forecast next hour
 
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-    depends_on:
-      - backend
-```
+## 🎯 Usage Guide
 
-2. Build and run:
+### 1. Load Data
+
+**Option A: Load Sample Data**
+- Go to Dashboard or Training page
+- Click "Load Sample Data" button
+
+**Option B: Upload Your Data**
+- Prepare CSV files from PVGIS (PV) and Load Profile Generator (Load)
+- Use the upload endpoint with your files
+
+### 2. Train Model
+
+1. Go to **Training** page
+2. Configure training parameters:
+   - Epochs (default: 50)
+   - Batch Size (default: 32)
+   - Validation Split (default: 0.2)
+3. Click **"Train Model"**
+4. Monitor training progress and metrics
+
+### 3. View Forecasts
+
+1. Go to **Forecasts** page
+2. Select number of hours to forecast
+3. Click **"Load Forecasts"**
+4. Compare predictions vs actual values
+5. View next-hour forecast
+
+## 📊 Visualizations
+
+The application provides several interactive charts:
+
+- **Historical Data**: Load and PV generation over time
+- **Training History**: Loss and MAE during training
+- **Forecast Comparison**: Predicted vs actual values
+- **Performance Metrics**: MAE, RMSE, R², MAPE
+
+## 🔧 Configuration
+
+### Backend Configuration
+
+Edit `backend/app.py` to modify:
+- Port (default: 5000)
+- Host (default: 0.0.0.0)
+- Data directory
+
+### Frontend Configuration
+
+Edit `frontend/src/services/api.js` to modify:
+- API base URL (default: http://localhost:5000/api)
+
+Or set environment variable:
 ```bash
+REACT_APP_API_URL=http://your-backend-url/api
+```
+
+## 📦 Dependencies
+
+### Backend
+- Flask 3.0.0
+- flask-cors 4.0.0
+- TensorFlow 2.13.0+
+- pandas 2.0.0+
+- scikit-learn 1.3.0+
+
+### Frontend
+- React 18.2.0
+- React Router 6.20.0
+- Recharts 2.10.0
+- Axios 1.6.0
+
+## 🐳 Docker Commands
+
+```bash
+# Build and start containers
 docker-compose up --build
+
+# Start in background
+docker-compose up -d
+
+# Stop containers
+docker-compose down
+
+# View logs
+docker-compose logs -f
+
+# Rebuild specific service
+docker-compose build backend
+docker-compose build frontend
 ```
 
-### Individual Docker Containers
+## 📝 Data Format
 
-#### Backend Dockerfile
-```dockerfile
-FROM python:3.9-slim
+### Expected CSV Format
 
-WORKDIR /app
+**PVGIS Data**:
+- Must have datetime column (as index or column)
+- PV generation column (will be renamed to 'pv')
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+**Load Profile Generator Data**:
+- Must have datetime column (as index or column)
+- Load column(s) (will be summed and renamed to 'load')
 
-COPY . .
+Adjust column names in `data_loader.py` to match your format.
 
-EXPOSE 8000
+## 🎓 Model Architecture
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
+- **Input**: Past 24 hours of load, PV, and calendar features
+- **LSTM Layers**: 
+  - First: 64 units (return_sequences=True)
+  - Second: 32 units
+  - Dropout: 0.2 after each layer
+- **Output**: Next-hour load and PV predictions
 
-#### Frontend Dockerfile
-```dockerfile
-FROM node:16-alpine
+## 🐛 Troubleshooting
 
-WORKDIR /app
+### Backend not starting
+- Check if port 5000 is available
+- Ensure all Python dependencies are installed
+- Check backend logs for errors
 
-COPY package*.json ./
-RUN npm install
+### Frontend not connecting to backend
+- Verify backend is running on port 5000
+- Check CORS settings in `backend/app.py`
+- Update API URL in `frontend/src/services/api.js`
 
-COPY . .
+### Model training fails
+- Ensure data is loaded first
+- Check that data has at least 24 hours
+- Verify data contains 'load' and 'pv' columns
 
-EXPOSE 3000
+## 📄 License
 
-CMD ["npm", "start"]
-```
-
-## 📊 API Endpoints
-
-### Buildings
-- `GET /buildings` - List all buildings with optional filtering
-- `GET /buildings/{building_id}` - Get building details
-- `GET /buildings/{building_id}/solar-analysis` - Solar analysis for specific building
-- `GET /buildings/{building_id}/technology-comparison` - Technology comparison
-
-### Statistics
-- `GET /statistics` - Overall dataset statistics
-- `GET /plot-data/roof-area-distribution` - Roof area distribution data
-- `GET /plot-data/solar-potential` - Solar potential data for visualization
-
-## 🔬 Solar Analysis Features
-
-### Supported Technologies
-- Mono-crystalline Silicon
-- Poly-crystalline Silicon
-- Thin Film
-- Perovskite
-
-### Analysis Metrics
-- Annual energy production
-- Optimal tilt and azimuth angles
-- System cost and payback period
-- Capacity factor
-- Energy per square meter
-
-## 🗺️ Map Features
-
-- Interactive map with building locations
-- Color-coded solar potential visualization
-- Filtering by solar potential range and building type
-- Detailed popup information for each building
-
-## 📈 Data Sources
-
-- **OpenStreetMap (OSM)**: Building geometry and basic information
-- **PVGIS**: Solar irradiance and energy calculations
-- **Custom Processing**: Population estimates and roof area calculations
+This project is for research/educational purposes.
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- PVGIS for solar energy calculations
-- OpenStreetMap contributors for building data
-- Material-UI for the frontend components
-- React Leaflet for map functionality
-
-## 📞 Support
-
-For support and questions, please open an issue in the GitHub repository.
-
----
-
-**Built with ❤️ for sustainable energy analysis in Torino, Italy**
+Feel free to submit issues or pull requests for improvements!

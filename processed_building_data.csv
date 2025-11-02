@@ -1,6 +1,0 @@
-OSM ID,Name,Building Type,Category,Height (m),Floors,Footprint Area (m²),Roof Area (m²),Estimated Population,Flats,Units,Apartments,Rooms,Address,Construction Year,Material,Energy Class,Data Sources,Latitude,Longitude,Solar_Potential_kWh_year,Energy_per_Person_kWh_year,Energy_per_m2_kWh_year
-way/49062146,,apartments,Residential,18,6,968.77,1000.99,142,,,,,,,,,osm,45.0447177,7.6367993,280277.2,1973.7830985915493,280.0
-way/182810424,,apartments,Residential,24,8,675.73,675.73,132,,,,,"181, Via Filadelfia, Torino",,,,osm,45.0450191,7.6359563,189204.40000000002,1433.3666666666668,280.0
-way/123456789,,apartments,Residential,17,5,749.27,774.18,94,,,,,,,,,osm,45.0439202,7.639273,216770.40000000002,2306.068085106383,280.00000000000006
-way/987654321,,apartments,Residential,30,10,1180.39,1219.64,110,,,,,,,,,osm,45.0445,7.637,341499.20000000007,3104.5381818181822,280.00000000000006
-way/555666777,,apartments,Residential,15,5,850.0,850.0,180,,,,,,,,,osm,45.0455,7.638,238000.0,1322.2222222222222,280.0
