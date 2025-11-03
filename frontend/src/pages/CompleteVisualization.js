@@ -70,16 +70,6 @@ function CompleteVisualization() {
         console.log('Summary not available');
       }
 
-      // Load all data summary
-      try {
-        const allSummaryResponse = await getAllDataSummary();
-        if (allSummaryResponse.data.success) {
-          setAllDataSummary(allSummaryResponse.data.summary);
-        }
-      } catch (e) {
-        console.log('All data summary not available yet');
-      }
-
       // Load battery data if available
       try {
         const batteryResponse = await getBatteryData(1000);
