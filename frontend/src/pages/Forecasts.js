@@ -207,11 +207,11 @@ function Forecasts() {
               <div className="stats-grid">
                 <div className="stat-item">
                   <strong>Load MAE:</strong>{' '}
-                  {forecastData.reduce((sum, d) => sum + Math.abs(d.load_actual - d.load_pred), 0) / forecastData.length).toFixed(4)} kW
+                  {((forecastData.reduce((sum, d) => sum + Math.abs(d.load_actual - d.load_pred), 0)) / forecastData.length).toFixed(4)} kW
                 </div>
                 <div className="stat-item">
                   <strong>PV MAE:</strong>{' '}
-                  {forecastData.reduce((sum, d) => sum + Math.abs(d.pv_actual - d.pv_pred), 0) / forecastData.length).toFixed(4)} kW
+                  {((forecastData.reduce((sum, d) => sum + Math.abs(d.pv_actual - d.pv_pred), 0)) / forecastData.length).toFixed(4)} kW
                 </div>
               </div>
             </div>
