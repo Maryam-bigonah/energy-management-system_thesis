@@ -205,11 +205,13 @@ predictions = model.predict(df)
 
 ---
 
-### 4. Battery Model (`battery_model.py`)
+### 4. Battery Model
+
+#### A. Individual Battery Model (`battery_model.py`)
 
 **What it does:**
 - Implements battery SOC (State of Charge) update equation
-- Models battery charging/discharging
+- Models battery charging/discharging for single units
 - Integrates with master dataset for energy management
 
 **SOC Update Equation:**
