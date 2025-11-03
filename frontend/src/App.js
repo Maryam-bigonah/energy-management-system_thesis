@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import Training from './pages/Training';
 import Forecasts from './pages/Forecasts';
+import CompleteVisualization from './pages/CompleteVisualization';
 import './App.css';
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/training" element={<Training />} />
             <Route path="/forecasts" element={<Forecasts />} />
+            <Route path="/complete" element={<CompleteVisualization />} />
           </Routes>
         </main>
       </div>

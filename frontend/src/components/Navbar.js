@@ -30,6 +30,12 @@ function Navbar() {
           >
             Forecasts
           </Link>
+          <Link 
+            to="/complete" 
+            className={location.pathname === '/complete' ? 'active' : ''}
+          >
+            Complete View
+          </Link>
         </div>
       </div>
     </nav>

@@ -17,9 +17,12 @@ sys.path.insert(0, parent_dir)
 try:
     from lstm_energy_forecast import EnergyForecastLSTM
     from data_loader import create_sample_torino_data, combine_data, load_pvgis_data, load_lpg_data
+    from shared_battery_model import simulate_shared_battery_torino
+    from tariffs_model import TariffsModel
+    from energy_economic_analysis import run_complete_analysis
 except ImportError as e:
-    print(f"Warning: Could not import LSTM modules: {e}")
-    print("Make sure lstm_energy_forecast.py and data_loader.py are in the parent directory")
+    print(f"Warning: Could not import some modules: {e}")
+    print("Make sure all required modules are in the parent directory")
 
 app = Flask(__name__)
 CORS(app)
@@ -27,6 +30,9 @@ CORS(app)
 # Global variables
 model = None
 df = None
+df_master = None  # Master dataset with all apartments
+battery_results = None  # Battery simulation results
+economic_results = None  # Economic analysis results
 model_trained = False
 
 # Data storage (in production, use a database)
@@ -113,9 +119,12 @@ def upload_data():
 @app.route('/api/data/historical', methods=['GET'])
 def get_historical_data():
     """Get historical data for visualization"""
-    global df
+    global df, df_master
     
-    if df is None or len(df) == 0:
+    # Use master dataset if available, otherwise fall back to simple df
+    data_source = df_master if df_master is not None else df
+    
+    if data_source is None or len(data_source) == 0:
         return jsonify({'success': False, 'error': 'No data loaded'}), 400
     
     try:
@@ -123,7 +132,7 @@ def get_historical_data():
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         
-        data_df = df.copy()
+        data_df = data_source.copy()
         
         if start_date:
             data_df = data_df[data_df.index >= start_date]
@@ -135,17 +144,45 @@ def get_historical_data():
         if len(data_df) > limit:
             data_df = data_df.iloc[-limit:]
         
-        # Convert to JSON format
+        # Build response based on available columns
+        apt_cols = [col for col in data_df.columns if col.startswith('apartment_')]
+        apt_cols.sort()
+        
         data = {
             'timestamps': [ts.isoformat() for ts in data_df.index],
-            'load': df['load'].values.tolist(),
-            'pv': df['pv'].values.tolist()
         }
+        
+        # Add PV
+        if 'pv_1kw' in data_df.columns:
+            data['pv'] = data_df['pv_1kw'].values.tolist()
+        elif 'pv' in data_df.columns:
+            data['pv'] = data_df['pv'].values.tolist()
+        
+        # Add apartment loads
+        if apt_cols:
+            data['apartments'] = {}
+            for col in apt_cols:
+                data['apartments'][col] = data_df[col].values.tolist()
+            data['total_load'] = data_df[apt_cols].sum(axis=1).values.tolist()
+        elif 'load' in data_df.columns:
+            data['load'] = data_df['load'].values.tolist()
+        
+        # Add calendar features if available
+        if 'hour' in data_df.columns:
+            data['hour'] = data_df['hour'].values.tolist()
+        if 'dayofweek' in data_df.columns:
+            data['dayofweek'] = data_df['dayofweek'].values.tolist()
+        if 'month' in data_df.columns:
+            data['month'] = data_df['month'].values.tolist()
+        if 'season' in data_df.columns:
+            data['season'] = data_df['season'].values.tolist()
         
         return jsonify({
             'success': True,
             'data': data,
-            'count': len(data_df)
+            'count': len(data_df),
+            'has_apartments': len(apt_cols) > 0,
+            'has_calendar': 'hour' in data_df.columns
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
@@ -307,6 +344,268 @@ def forecast_next_hour():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/data/master-dataset', methods=['GET'])
+def get_master_dataset():
+    """Get complete master dataset with all features"""
+    global df_master
+    
+    if df_master is None or len(df_master) == 0:
+        return jsonify({'success': False, 'error': 'Master dataset not loaded'}), 400
+    
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        limit = int(request.args.get('limit', 1000))
+        
+        data_df = df_master.copy()
+        
+        if start_date:
+            data_df = data_df[data_df.index >= start_date]
+        if end_date:
+            data_df = data_df[data_df.index <= end_date]
+        
+        if len(data_df) > limit:
+            data_df = data_df.iloc[-limit:]
+        
+        # Get all column names
+        apt_cols = [col for col in data_df.columns if col.startswith('apartment_')]
+        apt_cols.sort()
+        calendar_cols = ['hour', 'dayofweek', 'month', 'is_weekend', 'season']
+        other_cols = [col for col in data_df.columns if col not in apt_cols and col not in calendar_cols]
+        
+        # Build comprehensive response
+        result = {
+            'timestamps': [ts.isoformat() for ts in data_df.index],
+            'apartments': {},
+            'pv': data_df['pv_1kw'].values.tolist() if 'pv_1kw' in data_df.columns else [],
+            'total_load': data_df[apt_cols].sum(axis=1).values.tolist() if apt_cols else [],
+            'calendar': {}
+        }
+        
+        # Add apartment data
+        for col in apt_cols:
+            result['apartments'][col] = data_df[col].values.tolist()
+        
+        # Add calendar features
+        for col in calendar_cols:
+            if col in data_df.columns:
+                result['calendar'][col] = data_df[col].values.tolist()
+        
+        # Add other columns (battery, grid, etc.)
+        for col in other_cols:
+            if col in data_df.columns and data_df[col].dtype in ['float64', 'int64']:
+                result[col] = data_df[col].values.tolist()
+        
+        return jsonify({
+            'success': True,
+            'data': result,
+            'metadata': {
+                'count': len(data_df),
+                'n_apartments': len(apt_cols),
+                'date_range': {
+                    'start': data_df.index[0].isoformat(),
+                    'end': data_df.index[-1].isoformat()
+                },
+                'columns': {
+                    'apartments': apt_cols,
+                    'calendar': [c for c in calendar_cols if c in data_df.columns],
+                    'other': other_cols
+                }
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/battery/simulate', methods=['POST'])
+def simulate_battery():
+    """Run battery simulation on master dataset"""
+    global df_master, battery_results
+    
+    if df_master is None or len(df_master) == 0:
+        return jsonify({'success': False, 'error': 'Master dataset not loaded'}), 400
+    
+    try:
+        data = request.get_json() or {}
+        battery_capacity = float(data.get('capacity_kwh', 20.0))
+        allocation_method = data.get('allocation_method', 'energy_share')
+        initial_soc = float(data.get('initial_soc', 0.5))
+        
+        results, model = simulate_shared_battery_torino(
+            df_master=df_master,
+            battery_capacity_kwh=battery_capacity,
+            allocation_method=allocation_method,
+            initial_soc=initial_soc
+        )
+        
+        battery_results = results
+        
+        # Convert to JSON format
+        limit = int(data.get('limit', 1000))
+        if len(results) > limit:
+            results = results.iloc[-limit:]
+        
+        response_data = {
+            'timestamps': [ts.isoformat() for ts in results.index],
+            'battery_soc': results['battery_soc'].values.tolist(),
+            'battery_charge_total': results['battery_charge_total'].values.tolist(),
+            'battery_discharge_total': results['battery_discharge_total'].values.tolist(),
+            'building_pv': results['building_pv'].values.tolist() if 'building_pv' in results.columns else [],
+            'building_total_load': results['building_total_load'].values.tolist() if 'building_total_load' in results.columns else [],
+            'grid_import': results['grid_import'].values.tolist() if 'grid_import' in results.columns else [],
+            'grid_export': results['grid_export'].values.tolist() if 'grid_export' in results.columns else [],
+            'unit_allocation': {}
+        }
+        
+        # Add unit-level allocation
+        apt_cols = [col for col in results.columns if 'apartment' in col and 'battery_charge' in col]
+        for col in apt_cols:
+            unit_name = col.replace('_battery_charge', '')
+            response_data['unit_allocation'][unit_name] = {
+                'charge': results[col].values.tolist(),
+                'discharge': results[unit_name + '_battery_discharge'].values.tolist() if unit_name + '_battery_discharge' in results.columns else []
+            }
+        
+        summary = model.get_allocation_summary(results) if hasattr(model, 'get_allocation_summary') else {}
+        
+        return jsonify({
+            'success': True,
+            'data': response_data,
+            'summary': summary,
+            'count': len(results)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/battery/data', methods=['GET'])
+def get_battery_data():
+    """Get battery simulation results"""
+    global battery_results
+    
+    if battery_results is None or len(battery_results) == 0:
+        return jsonify({'success': False, 'error': 'No battery simulation results available'}), 400
+    
+    try:
+        limit = int(request.args.get('limit', 1000))
+        data_df = battery_results.copy()
+        
+        if len(data_df) > limit:
+            data_df = data_df.iloc[-limit:]
+        
+        # Similar format as simulate endpoint
+        response_data = {
+            'timestamps': [ts.isoformat() for ts in data_df.index],
+            'battery_soc': data_df['battery_soc'].values.tolist(),
+            'battery_charge_total': data_df['battery_charge_total'].values.tolist(),
+            'battery_discharge_total': data_df['battery_discharge_total'].values.tolist(),
+            'grid_import': data_df['grid_import'].values.tolist() if 'grid_import' in data_df.columns else [],
+            'grid_export': data_df['grid_export'].values.tolist() if 'grid_export' in data_df.columns else []
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': response_data,
+            'count': len(data_df)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/economic/analyze', methods=['POST'])
+def analyze_economic():
+    """Run economic analysis with tariffs"""
+    global battery_results, economic_results
+    
+    if battery_results is None or len(battery_results) == 0:
+        return jsonify({'success': False, 'error': 'Need battery simulation results first'}), 400
+    
+    try:
+        data = request.get_json() or {}
+        tariffs_csv = data.get('tariffs_csv')
+        fit_csv = data.get('fit_csv')
+        
+        if not tariffs_csv and not fit_csv:
+            return jsonify({'success': False, 'error': 'Need tariffs_csv or fit_csv'}), 400
+        
+        tariffs = TariffsModel(
+            tariffs_csv=tariffs_csv if tariffs_csv else None,
+            fit_csv=fit_csv if fit_csv else None
+        )
+        
+        econ_results, summary = tariffs.calculate_cost_revenue(
+            battery_results,
+            grid_import_col='grid_import',
+            grid_export_col='grid_export'
+        )
+        
+        economic_results = econ_results
+        
+        limit = int(data.get('limit', 1000))
+        if len(econ_results) > limit:
+            econ_results = econ_results.iloc[-limit:]
+        
+        response_data = {
+            'timestamps': [ts.isoformat() for ts in econ_results.index],
+            'grid_import_cost': econ_results['grid_import_cost'].values.tolist() if 'grid_import_cost' in econ_results.columns else [],
+            'grid_export_revenue': econ_results['grid_export_revenue'].values.tolist() if 'grid_export_revenue' in econ_results.columns else [],
+            'grid_import': econ_results['grid_import'].values.tolist() if 'grid_import' in econ_results.columns else [],
+            'grid_export': econ_results['grid_export'].values.tolist() if 'grid_export' in econ_results.columns else []
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': response_data,
+            'summary': summary,
+            'count': len(econ_results)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/data/summary', methods=['GET'])
+def get_data_summary():
+    """Get summary statistics of all data"""
+    global df_master, battery_results, economic_results
+    
+    summary = {}
+    
+    if df_master is not None and len(df_master) > 0:
+        apt_cols = [col for col in df_master.columns if col.startswith('apartment_')]
+        summary['master_dataset'] = {
+            'count': len(df_master),
+            'date_range': {
+                'start': df_master.index[0].isoformat(),
+                'end': df_master.index[-1].isoformat()
+            },
+            'n_apartments': len(apt_cols),
+            'total_load_mean': float(df_master[apt_cols].sum(axis=1).mean()) if apt_cols else None,
+            'pv_mean': float(df_master['pv_1kw'].mean()) if 'pv_1kw' in df_master.columns else None
+        }
+    
+    if battery_results is not None and len(battery_results) > 0:
+        summary['battery'] = {
+            'count': len(battery_results),
+            'avg_soc': float(battery_results['battery_soc'].mean()),
+            'total_charge': float(battery_results['battery_charge_total'].sum()),
+            'total_discharge': float(battery_results['battery_discharge_total'].sum()),
+            'total_grid_import': float(battery_results['grid_import'].sum()) if 'grid_import' in battery_results.columns else 0,
+            'total_grid_export': float(battery_results['grid_export'].sum()) if 'grid_export' in battery_results.columns else 0
+        }
+    
+    if economic_results is not None and len(economic_results) > 0:
+        summary['economic'] = {
+            'total_import_cost': float(economic_results['grid_import_cost'].sum()) if 'grid_import_cost' in economic_results.columns else 0,
+            'total_export_revenue': float(economic_results['grid_export_revenue'].sum()) if 'grid_export_revenue' in economic_results.columns else 0,
+            'net_cost': float(summary.get('economic', {}).get('total_import_cost', 0) - summary.get('economic', {}).get('total_export_revenue', 0))
+        }
+    
+    return jsonify({
+        'success': True,
+        'summary': summary
+    })
 
 
 if __name__ == '__main__':

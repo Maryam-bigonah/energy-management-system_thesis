@@ -42,6 +42,35 @@ export const getMetrics = () => api.get('/model/metrics');
 
 export const forecastNextHour = () => api.get('/model/forecast-next');
 
+// Master dataset endpoints
+export const getMasterDataset = (startDate, endDate, limit = 1000) =>
+  api.get('/data/master-dataset', {
+    params: { start_date: startDate, end_date: endDate, limit },
+  });
+
+// Battery endpoints
+export const simulateBattery = (capacityKwh = 20.0, allocationMethod = 'energy_share', initialSoc = 0.5, limit = 1000) =>
+  api.post('/battery/simulate', {
+    capacity_kwh: capacityKwh,
+    allocation_method: allocationMethod,
+    initial_soc: initialSoc,
+    limit,
+  });
+
+export const getBatteryData = (limit = 1000) =>
+  api.get('/battery/data', { params: { limit } });
+
+// Economic endpoints
+export const analyzeEconomic = (tariffsCsv, fitCsv, limit = 1000) =>
+  api.post('/economic/analyze', {
+    tariffs_csv: tariffsCsv,
+    fit_csv: fitCsv,
+    limit,
+  });
+
+// Data summary
+export const getDataSummary = () => api.get('/data/summary');
+
 export default api;
 
 
