@@ -6,7 +6,8 @@ import {
 } from 'recharts';
 import {
   getMasterDataset, getBatteryData, getDataSummary,
-  simulateBattery, analyzeEconomic
+  simulateBattery, analyzeEconomic,
+  getFamilyConsumption, getStorageEnergy, getAllDataSummary
 } from '../services/api';
 import './CompleteVisualization.css';
 
@@ -15,6 +16,9 @@ function CompleteVisualization() {
   const [batteryData, setBatteryData] = useState(null);
   const [economicData, setEconomicData] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [familyData, setFamilyData] = useState(null);
+  const [storageData, setStorageData] = useState(null);
+  const [allDataSummary, setAllDataSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -46,6 +50,36 @@ function CompleteVisualization() {
       const summaryResponse = await getDataSummary();
       if (summaryResponse.data.success) {
         setSummary(summaryResponse.data.summary);
+      }
+
+      // Load family consumption
+      try {
+        const familyResponse = await getFamilyConsumption(null, null, 1000);
+        if (familyResponse.data.success) {
+          setFamilyData(familyResponse.data.data);
+        }
+      } catch (e) {
+        console.log('Family data not available yet');
+      }
+
+      // Load storage energy data
+      try {
+        const storageResponse = await getStorageEnergy(1000);
+        if (storageResponse.data.success) {
+          setStorageData(storageResponse.data.data);
+        }
+      } catch (e) {
+        console.log('Storage data not available yet');
+      }
+
+      // Load all data summary
+      try {
+        const allSummaryResponse = await getAllDataSummary();
+        if (allSummaryResponse.data.success) {
+          setAllDataSummary(allSummaryResponse.data.summary);
+        }
+      } catch (e) {
+        console.log('All data summary not available yet');
       }
 
       // Load battery data if available

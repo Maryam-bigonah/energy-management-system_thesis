@@ -71,6 +71,23 @@ export const analyzeEconomic = (tariffsCsv, fitCsv, limit = 1000) =>
 // Data summary
 export const getDataSummary = () => api.get('/data/summary');
 
+// Load master dataset from CSV
+export const loadMasterCSV = (csvPath) =>
+  api.post('/data/load-master-csv', { csv_path: csvPath });
+
+// Family consumption
+export const getFamilyConsumption = (startDate, endDate, limit = 1000) =>
+  api.get('/data/family-consumption', {
+    params: { start_date: startDate, end_date: endDate, limit },
+  });
+
+// Storage energy (PV and battery)
+export const getStorageEnergy = (limit = 1000) =>
+  api.get('/data/storage-energy', { params: { limit } });
+
+// All data summary
+export const getAllDataSummary = () => api.get('/data/all-data-summary');
+
 export default api;
 
 
