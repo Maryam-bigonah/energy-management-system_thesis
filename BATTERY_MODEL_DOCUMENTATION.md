@@ -174,11 +174,71 @@ summary = battery.get_summary()
 
 ---
 
+## 🏢 Shared Battery Model
+
+### Building-Level Battery System
+
+**In the Torino case, we assume the PV-battery system is installed at building level and shared between the 20 units; allocation of battery power to each unit follows a metric (e.g. energy share, floor area, or P2P SDR), in analogy with the P2P intra-community trading model proposed by Liao et al. (2024).**
+
+### Implementation
+
+**File**: `shared_battery_model.py`
+
+**Allocation Methods:**
+
+1. **Energy Share** (`energy_share`):
+   - Allocation based on unit's energy consumption share
+   - Weight = Unit Load / Total Building Load
+
+2. **Floor Area** (`floor_area`):
+   - Allocation based on unit's floor area share
+   - Weight = Unit Floor Area / Total Floor Area
+
+3. **P2P SDR** (`p2p_sdr`):
+   - Peer-to-peer self-discharge ratio
+   - Similar to Liao et al. (2024)
+   - Units with higher energy deficits get higher battery priority
+
+### Usage
+
+```python
+from shared_battery_model import SharedBatteryModel, simulate_shared_battery_torino
+
+# Simulate with energy share allocation
+results, model = simulate_shared_battery_torino(
+    df_master=df_master,
+    battery_capacity_kwh=20.0,  # Building-level capacity
+    allocation_method='energy_share',
+    initial_soc=0.5
+)
+
+# Or with floor area allocation
+results, model = simulate_shared_battery_torino(
+    df_master=df_master,
+    battery_capacity_kwh=20.0,
+    allocation_method='floor_area',
+    floor_areas=[50, 60, 55, ...],  # Floor area per unit (m²)
+    initial_soc=0.5
+)
+```
+
+### Output
+
+Results DataFrame includes:
+- Building-level: `battery_soc`, `battery_charge_total`, `battery_discharge_total`
+- Unit-level: `apartment_XX_battery_charge`, `apartment_XX_battery_discharge`
+- Allocation: `apartment_XX_allocation_weight`
+- Grid: `grid_import`, `grid_export`
+
+---
+
 ## ✅ Status
 
 - ✅ Battery parameters stored
 - ✅ SOC equation implemented
 - ✅ Battery model class created
+- ✅ **Shared battery model with allocation methods**
+- ✅ **Building-level energy management**
 - ✅ Integration function for master dataset
 - ✅ Ready for energy management system
 
