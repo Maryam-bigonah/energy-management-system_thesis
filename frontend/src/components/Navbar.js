@@ -42,6 +42,12 @@ function Navbar() {
           >
             Database
           </Link>
+          <Link 
+            to="/lstm" 
+            className={location.pathname === '/lstm' ? 'active' : ''}
+          >
+            LSTM
+          </Link>
         </div>
       </div>
     </nav>

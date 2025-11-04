@@ -91,6 +91,23 @@ export const getAllDataSummary = () => api.get('/data/all-data-summary');
 // Database info - shows all available data
 export const getDatabaseInfo = () => api.get('/data/database-info');
 
+// New LSTM Pipeline endpoints
+export const trainLSTMPipeline = (epochs = 30, batchSize = 32, lstmUnits = 64, learningRate = 1e-3, scaleTargets = true) =>
+  api.post('/lstm/train', {
+    epochs,
+    batch_size: batchSize,
+    lstm_units: lstmUnits,
+    learning_rate: learningRate,
+    scale_targets: scaleTargets,
+    window: 24
+  });
+
+export const getLSTMEvaluation = () => api.get('/lstm/evaluation');
+
+export const getLSTMTrainingHistory = () => api.get('/lstm/training-history');
+
+export const getLSTMStatus = () => api.get('/lstm/status');
+
 export default api;
 
 

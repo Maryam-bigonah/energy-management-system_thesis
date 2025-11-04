@@ -21,6 +21,12 @@ try:
     from tariffs_model import TariffsModel
     from energy_economic_analysis import run_complete_analysis
     from build_master_dataset_final import build_master_dataset
+    # New LSTM pipeline imports
+    from prepare_lstm_data import prepare_lstm_data, split_train_val_test, scale_3d, scale_target
+    from build_lstm_model import build_lstm_model
+    from train_lstm_model import train_lstm_model
+    from evaluate_lstm_model import evaluate_model
+    from save_load_lstm import save_lstm_model, load_lstm_model
 except ImportError as e:
     print(f"Warning: Could not import some modules: {e}")
     print("Make sure all required modules are in the parent directory")
@@ -35,6 +41,12 @@ df_master = None  # Master dataset with all apartments
 battery_results = None  # Battery simulation results
 economic_results = None  # Economic analysis results
 model_trained = False
+# New LSTM pipeline variables
+lstm_model = None  # New LSTM model
+lstm_training_history = None  # Training history
+lstm_evaluation_results = None  # Evaluation results (MAE, RMSE, predictions)
+lstm_scaler_X = None  # Feature scaler
+lstm_scaler_y = None  # Target scaler
 
 # Data storage (in production, use a database)
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
@@ -405,5 +417,176 @@ def get_database_info():
             'error': error_msg,
             'traceback': traceback_msg if app.debug else None
         }), 400
+
+
+# ============================================================================
+# New LSTM Pipeline Endpoints (Steps 2-9)
+# ============================================================================
+
+@app.route('/api/lstm/prepare-data', methods=['POST'])
+def prepare_lstm_data_endpoint():
+    """Step 2-3: Prepare LSTM data from master dataset"""
+    global df_master
+    
+    if df_master is None or len(df_master) == 0:
+        return jsonify({'success': False, 'error': 'Master dataset not loaded'}), 400
+    
+    try:
+        window = int(request.json.get('window', 24))
+        horizon = int(request.json.get('horizon', 1))
+        
+        # Prepare data
+        X, y, feature_cols, df_features = prepare_lstm_data(df_master, window=window, horizon=horizon)
+        
+        return jsonify({
+            'success': True,
+            'X_shape': list(X.shape),
+            'y_shape': list(y.shape),
+            'feature_cols': feature_cols,
+            'n_samples': len(X)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/lstm/train', methods=['POST'])
+def train_lstm_pipeline():
+    """Step 2-9: Complete LSTM training pipeline"""
+    global df_master, lstm_model, lstm_training_history, lstm_evaluation_results, lstm_scaler_X, lstm_scaler_y
+    
+    if df_master is None or len(df_master) == 0:
+        return jsonify({'success': False, 'error': 'Master dataset not loaded'}), 400
+    
+    try:
+        # Get parameters
+        epochs = int(request.json.get('epochs', 30))
+        batch_size = int(request.json.get('batch_size', 32))
+        lstm_units = int(request.json.get('lstm_units', 64))
+        learning_rate = float(request.json.get('learning_rate', 1e-3))
+        scale_targets = request.json.get('scale_targets', True)
+        window = int(request.json.get('window', 24))
+        
+        # Step 2-3: Prepare data
+        X, y, feature_cols, df_features = prepare_lstm_data(df_master, window=window, horizon=1)
+        
+        # Step 4: Split
+        X_train, X_val, X_test, y_train, y_val, y_test = split_train_val_test(X, y)
+        
+        # Step 5: Scale
+        X_train_scaled, X_val_scaled, X_test_scaled, scaler_X = scale_3d(X_train, X_val, X_test)
+        lstm_scaler_X = scaler_X
+        
+        if scale_targets:
+            y_train_scaled, y_val_scaled, y_test_scaled, scaler_y = scale_target(y_train, y_val, y_test)
+            lstm_scaler_y = scaler_y
+            y_train_use = y_train_scaled
+            y_val_use = y_val_scaled
+        else:
+            lstm_scaler_y = None
+            y_train_use = y_train
+            y_val_use = y_val
+        
+        # Step 6: Build model
+        n_features = len(feature_cols)
+        model = build_lstm_model(window_size=window, n_features=n_features, lstm_units=lstm_units, learning_rate=learning_rate)
+        lstm_model = model
+        
+        # Step 7: Train
+        history, model = train_lstm_model(model, X_train_scaled, y_train_use, X_val_scaled, y_val_use, epochs=epochs, batch_size=batch_size)
+        lstm_training_history = history.history
+        
+        # Step 8: Evaluate
+        mae, rmse, y_pred, y_true = evaluate_model(model, X_test_scaled, y_test, scaler_y=lstm_scaler_y)
+        
+        # Store evaluation results
+        lstm_evaluation_results = {
+            'mae': float(mae),
+            'rmse': float(rmse),
+            'y_pred': y_pred.flatten().tolist()[:1000],  # Limit to 1000 points for API
+            'y_true': y_true.flatten().tolist()[:1000],
+            'n_samples': len(y_true)
+        }
+        
+        # Prepare training history for frontend
+        training_data = {
+            'epochs': list(range(1, len(history.history['loss']) + 1)),
+            'train_loss': [float(x) for x in history.history['loss']],
+            'val_loss': [float(x) for x in history.history['val_loss']],
+            'train_mae': [float(x) for x in history.history['mae']],
+            'val_mae': [float(x) for x in history.history['val_mae']]
+        }
+        
+        return jsonify({
+            'success': True,
+            'message': 'LSTM training complete',
+            'metrics': {
+                'mae': float(mae),
+                'rmse': float(rmse),
+                'final_train_loss': float(history.history['loss'][-1]),
+                'final_val_loss': float(history.history['val_loss'][-1]),
+                'best_epoch': int(np.argmin(history.history['val_loss']) + 1),
+                'epochs_trained': len(history.history['loss'])
+            },
+            'training_history': training_data,
+            'evaluation': lstm_evaluation_results
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc() if app.debug else None
+        }), 400
+
+
+@app.route('/api/lstm/evaluation', methods=['GET'])
+def get_lstm_evaluation():
+    """Get LSTM evaluation results"""
+    global lstm_evaluation_results
+    
+    if lstm_evaluation_results is None:
+        return jsonify({'success': False, 'error': 'Model not trained yet'}), 400
+    
+    return jsonify({
+        'success': True,
+        'evaluation': lstm_evaluation_results
+    })
+
+
+@app.route('/api/lstm/training-history', methods=['GET'])
+def get_lstm_training_history():
+    """Get LSTM training history"""
+    global lstm_training_history
+    
+    if lstm_training_history is None:
+        return jsonify({'success': False, 'error': 'Model not trained yet'}), 400
+    
+    training_data = {
+        'epochs': list(range(1, len(lstm_training_history['loss']) + 1)),
+        'train_loss': [float(x) for x in lstm_training_history['loss']],
+        'val_loss': [float(x) for x in lstm_training_history['val_loss']],
+        'train_mae': [float(x) for x in lstm_training_history['mae']],
+        'val_mae': [float(x) for x in lstm_training_history['val_mae']]
+    }
+    
+    return jsonify({
+        'success': True,
+        'training_history': training_data
+    })
+
+
+@app.route('/api/lstm/status', methods=['GET'])
+def get_lstm_status():
+    """Get LSTM model status"""
+    global lstm_model, lstm_training_history, lstm_evaluation_results
+    
+    return jsonify({
+        'success': True,
+        'model_trained': lstm_model is not None,
+        'has_history': lstm_training_history is not None,
+        'has_evaluation': lstm_evaluation_results is not None,
+        'metrics': lstm_evaluation_results.get('metrics', {}) if lstm_evaluation_results else None
+    })
+
 
 # ... existing code continues ...
