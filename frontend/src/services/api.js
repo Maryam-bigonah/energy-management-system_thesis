@@ -88,6 +88,9 @@ export const getStorageEnergy = (limit = 1000) =>
 // All data summary
 export const getAllDataSummary = () => api.get('/data/all-data-summary');
 
+// Database info - shows all available data
+export const getDatabaseInfo = () => api.get('/data/database-info');
+
 export default api;
 
 

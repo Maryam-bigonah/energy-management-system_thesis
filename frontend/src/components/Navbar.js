@@ -36,6 +36,12 @@ function Navbar() {
           >
             Complete View
           </Link>
+          <Link 
+            to="/database" 
+            className={location.pathname === '/database' ? 'active' : ''}
+          >
+            Database
+          </Link>
         </div>
       </div>
     </nav>

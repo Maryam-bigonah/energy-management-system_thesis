@@ -279,4 +279,107 @@ def get_all_data_summary():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
+
+@app.route('/api/data/database-info', methods=['GET'])
+def get_database_info():
+    """Get complete information about all available data: what's loaded, what files exist"""
+    global df_master, battery_results, economic_results, df
+    
+    try:
+        info = {
+            'data_loaded': {},
+            'data_files': [],
+            'loaded_data_stats': {}
+        }
+        
+        # Check what's loaded in memory
+        info['data_loaded'] = {
+            'master_dataset': df_master is not None and len(df_master) > 0,
+            'battery_results': battery_results is not None and len(battery_results) > 0,
+            'economic_results': economic_results is not None and len(economic_results) > 0,
+            'historical_data': df is not None and len(df) > 0
+        }
+        
+        # Get stats for loaded data
+        if df_master is not None and len(df_master) > 0:
+            apt_cols = [col for col in df_master.columns if col.startswith('apartment_')]
+            info['loaded_data_stats']['master_dataset'] = {
+                'rows': len(df_master),
+                'columns': list(df_master.columns),
+                'date_range': {
+                    'start': str(df_master.index.min()),
+                    'end': str(df_master.index.max())
+                },
+                'n_apartments': len(apt_cols),
+                'total_load_range': {
+                    'min': float(df_master[apt_cols].sum(axis=1).min()) if apt_cols else 0,
+                    'max': float(df_master[apt_cols].sum(axis=1).max()) if apt_cols else 0,
+                    'mean': float(df_master[apt_cols].sum(axis=1).mean()) if apt_cols else 0
+                },
+                'pv_range': {
+                    'min': float(df_master['pv_1kw'].min()) if 'pv_1kw' in df_master.columns else 0,
+                    'max': float(df_master['pv_1kw'].max()) if 'pv_1kw' in df_master.columns else 0,
+                    'mean': float(df_master['pv_1kw'].mean()) if 'pv_1kw' in df_master.columns else 0
+                }
+            }
+        
+        if battery_results is not None and len(battery_results) > 0:
+            info['loaded_data_stats']['battery_results'] = {
+                'rows': len(battery_results),
+                'columns': list(battery_results.columns),
+                'date_range': {
+                    'start': str(battery_results.index.min()),
+                    'end': str(battery_results.index.max())
+                },
+                'total_charge_kwh': float(battery_results['battery_charge_total'].sum()) if 'battery_charge_total' in battery_results.columns else 0,
+                'total_discharge_kwh': float(battery_results['battery_discharge_total'].sum()) if 'battery_discharge_total' in battery_results.columns else 0,
+                'avg_soc': float(battery_results['battery_soc'].mean()) if 'battery_soc' in battery_results.columns else 0
+            }
+        
+        if economic_results is not None and len(economic_results) > 0:
+            info['loaded_data_stats']['economic_results'] = {
+                'rows': len(economic_results),
+                'columns': list(economic_results.columns),
+                'date_range': {
+                    'start': str(economic_results.index.min()),
+                    'end': str(economic_results.index.max())
+                },
+                'total_import_cost_eur': float(economic_results['grid_import_cost'].sum()) if 'grid_import_cost' in economic_results.columns else 0,
+                'total_export_revenue_eur': float(economic_results['grid_export_revenue'].sum()) if 'grid_export_revenue' in economic_results.columns else 0
+            }
+        
+        # Check what files exist in data directory
+        if os.path.exists(DATA_DIR):
+            for file in os.listdir(DATA_DIR):
+                file_path = os.path.join(DATA_DIR, file)
+                if os.path.isfile(file_path):
+                    file_size = os.path.getsize(file_path)
+                    file_info = {
+                        'name': file,
+                        'size_bytes': file_size,
+                        'size_mb': round(file_size / (1024 * 1024), 2),
+                        'path': file_path
+                    }
+                    
+                    # If it's a CSV, try to get basic info
+                    if file.endswith('.csv'):
+                        try:
+                            sample_df = pd.read_csv(file_path, nrows=5)
+                            file_info['type'] = 'CSV'
+                            file_info['columns'] = list(sample_df.columns)
+                            file_info['sample_rows'] = 5
+                        except:
+                            file_info['type'] = 'CSV (unreadable)'
+                    else:
+                        file_info['type'] = 'Other'
+                    
+                    info['data_files'].append(file_info)
+        
+        return jsonify({
+            'success': True,
+            'info': info
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
 # ... existing code continues ...
