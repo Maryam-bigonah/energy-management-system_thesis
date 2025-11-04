@@ -294,3 +294,5 @@ function LSTMVisualization() {
   );
 }
 
+export default LSTMVisualization;
+
