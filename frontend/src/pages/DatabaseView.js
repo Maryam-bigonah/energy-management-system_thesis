@@ -14,6 +14,7 @@ const DatabaseView = () => {
   const loadDatabaseInfo = async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await getDatabaseInfo();
       if (response.data.success) {
         setInfo(response.data.info);
@@ -21,7 +22,18 @@ const DatabaseView = () => {
         setError(response.data.error || 'Failed to load database info');
       }
     } catch (err) {
-      setError(err.message || 'Failed to connect to backend');
+      console.error('Database info error:', err);
+      // More specific error message
+      if (err.response) {
+        // Server responded with error
+        setError(err.response.data?.error || `Server error: ${err.response.status}`);
+      } else if (err.request) {
+        // Request made but no response
+        setError('Cannot connect to backend. Is the backend running on http://localhost:5000?');
+      } else {
+        // Something else happened
+        setError(err.message || 'Failed to connect to backend');
+      }
     } finally {
       setLoading(false);
     }

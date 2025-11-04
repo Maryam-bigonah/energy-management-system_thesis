@@ -40,6 +40,16 @@ model_trained = False
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
 
 
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'success': True,
+        'status': 'healthy',
+        'message': 'Backend is running'
+    })
+
+
 @app.route('/api/data/load-master-csv', methods=['POST'])
 def load_master_csv():
     """Load master dataset from CSV file"""
@@ -292,6 +302,11 @@ def get_database_info():
             'loaded_data_stats': {}
         }
         
+        # Ensure DATA_DIR exists
+        if not os.path.exists(DATA_DIR):
+            print(f"Warning: DATA_DIR does not exist: {DATA_DIR}")
+            os.makedirs(DATA_DIR, exist_ok=True)
+        
         # Check what's loaded in memory
         info['data_loaded'] = {
             'master_dataset': df_master is not None and len(df_master) > 0,
@@ -380,6 +395,15 @@ def get_database_info():
             'info': info
         })
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
+        import traceback
+        error_msg = str(e)
+        traceback_msg = traceback.format_exc()
+        print(f"Error in get_database_info: {error_msg}")
+        print(f"Traceback: {traceback_msg}")
+        return jsonify({
+            'success': False, 
+            'error': error_msg,
+            'traceback': traceback_msg if app.debug else None
+        }), 400
 
 # ... existing code continues ...
