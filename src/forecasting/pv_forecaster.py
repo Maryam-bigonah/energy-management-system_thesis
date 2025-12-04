@@ -37,10 +37,30 @@ def _add_time_features(df: pd.DataFrame) -> pd.DataFrame:
     hours = df.index.hour
     df["hour_sin"] = np.sin(2 * np.pi * hours / 24)
     df["hour_cos"] = np.cos(2 * np.pi * hours / 24)
+
+    # Day-of-week (0=Monday ... 6=Sunday) and cyclic encoding
     dow = df.index.dayofweek
+    df["day_of_week"] = dow
     df["dow_sin"] = np.sin(2 * np.pi * dow / 7)
     df["dow_cos"] = np.cos(2 * np.pi * dow / 7)
+
+    # Weekend flag
     df["is_weekend"] = (dow >= 5).astype(int)
+
+    # Month (1–12)
+    month = df.index.month
+    df["month"] = month
+
+    # Season: 0=winter, 1=spring, 2=summer, 3=autumn
+    season = np.full(len(df), 3, dtype=int)  # default autumn
+    winter_mask = (month == 12) | (month <= 2)
+    spring_mask = (month >= 3) & (month <= 5)
+    summer_mask = (month >= 6) & (month <= 8)
+    season[winter_mask] = 0
+    season[spring_mask] = 1
+    season[summer_mask] = 2
+    df["season"] = season
+
     return df
 
 
@@ -284,10 +304,225 @@ class RecursivePVForecaster:
         return forecast_series
 
 
+def forecast_pv_timeseries(
+    history_df: pd.DataFrame,
+    weather_forecast_df: pd.DataFrame,
+    static_features: Optional[Mapping[str, float]] = None,
+    model: Optional[RegressorMixin] = None,
+    lag_hours: int = 24,
+    val_size: float = 0.1,
+    test_size: float = 0.1,
+) -> Tuple[pd.Series, Dict[str, Dict[str, float]], RecursivePVForecaster]:
+    """
+    High-level helper that:
+        1) Instantiates and fits a RecursivePVForecaster.
+        2) Produces a 24-hour PV forecast using the trained model.
+
+    Returns
+    -------
+    pv_forecast : pd.Series
+        24-hour ahead PV power forecast (1-hour resolution).
+    metrics : dict
+        Validation and test metrics returned by RecursivePVForecaster.fit().
+    forecaster : RecursivePVForecaster
+        The fitted forecaster instance (for reuse or inspection).
+    """
+    forecaster = RecursivePVForecaster(
+        lag_hours=lag_hours,
+        model=model,
+        static_features=static_features,
+    )
+    metrics = forecaster.fit(history_df, val_size=val_size, test_size=test_size)
+    pv_forecast = forecaster.forecast(history_df, weather_forecast_df)
+    return pv_forecast, metrics, forecaster
+
+
+def forecast_non_shiftable_load_seasonal_naive(
+    load_history: pd.Series,
+    forecast_start: Optional[pd.Timestamp] = None,
+    horizon_hours: int = 24,
+    season_hours: int = 168,
+) -> pd.Series:
+    """
+    Weekly seasonal naïve forecast for non-shiftable demand.
+
+    Strict rule:
+        forecast_load[t] = realized_load[t - season_hours]
+
+    Parameters
+    ----------
+    load_history : pd.Series
+        Historical non-shiftable load with 1-hour resolution and DatetimeIndex.
+    forecast_start : pd.Timestamp, optional
+        First timestamp to forecast. If None, uses last history timestamp + 1 hour.
+    horizon_hours : int
+        Forecast horizon in hours (default 24).
+    season_hours : int
+        Seasonal period in hours (default 168 = 7 days).
+    """
+    if not isinstance(load_history.index, pd.DatetimeIndex):
+        raise ValueError("load_history must use a DatetimeIndex.")
+
+    load_history = load_history.sort_index()
+
+    if forecast_start is None:
+        if len(load_history) == 0:
+            raise ValueError("load_history is empty; cannot determine forecast_start.")
+        forecast_start = load_history.index[-1] + pd.Timedelta(hours=1)
+
+    future_index = pd.date_range(start=forecast_start, periods=horizon_hours, freq="H")
+
+    values = []
+    for ts in future_index:
+        ref_time = ts - pd.Timedelta(hours=season_hours)
+        if ref_time not in load_history.index:
+            raise ValueError(
+                f"Missing historical value for reference time {ref_time}. "
+                "Ensure at least one full seasonal period (168 hours) of history is available."
+            )
+        values.append(load_history.loc[ref_time])
+
+    forecast = pd.Series(values, index=future_index, name="non_shiftable_load_forecast")
+    return forecast
+
+
+@dataclass
+class ShiftableDevice:
+    """
+    Representation of a single shiftable device.
+
+    Attributes
+    ----------
+    name : str
+        Human-readable device name (e.g. 'Dishwasher').
+    power_profile_15min_kw : pd.Series
+        Single-cycle power profile for the device with 15-minute resolution.
+        Index should be a DatetimeIndex or TimedeltaIndex at 15-minute steps.
+    earliest_start : pd.Timestamp
+        Earliest allowed start time for the device.
+    latest_end : pd.Timestamp
+        Latest allowed end time for the device.
+    """
+
+    name: str
+    power_profile_15min_kw: pd.Series
+    earliest_start: pd.Timestamp
+    latest_end: pd.Timestamp
+
+
+def compute_shiftable_load_profiles(
+    devices: Mapping[str, ShiftableDevice],
+    freq: str = "1H",
+) -> pd.DataFrame:
+    """
+    Aggregates 15-minute device power profiles into 1-hour resolution profiles.
+
+    This function does NOT perform any forecasting or scheduling. It only
+    converts the provided deterministic single-cycle profiles to the
+    requested time resolution, to be used later by the optimization layer.
+
+    Parameters
+    ----------
+    devices : Mapping[str, ShiftableDevice]
+        Dictionary-like object mapping device identifiers to ShiftableDevice
+        instances. The `name` attribute is used as the column label.
+    freq : str
+        Desired pandas offset alias for resampling (default '1H').
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame where each column corresponds to a device, and rows contain
+        the resampled power profile at the requested resolution.
+    """
+    if not devices:
+        return pd.DataFrame()
+
+    hourly_profiles: Dict[str, pd.Series] = {}
+    for dev_id, dev in devices.items():
+        series = dev.power_profile_15min_kw.sort_index()
+        if not isinstance(series.index, pd.DatetimeIndex) and not isinstance(series.index, pd.TimedeltaIndex):
+            raise ValueError(
+                f"power_profile_15min_kw for device '{dev_id}' must have a DatetimeIndex or TimedeltaIndex."
+            )
+        # Resample to desired resolution using the mean power over each hour.
+        hourly = series.resample(freq).mean()
+        hourly_profiles[dev.name] = hourly
+
+    df = pd.DataFrame(hourly_profiles)
+    return df
+
+
+def classify_device_name(device_name: str) -> str:
+    """
+    Deterministically classify a single device name as 'shiftable' or 'non_shiftable'
+    using only fixed keyword rules (no learning, no statistics).
+
+    Shiftable if the lowercased name contains ANY of:
+        'dishwasher',
+        'washing machine', 'washing_machine',
+        'dryer', 'tumble dryer',
+        'wm',
+        'dw',
+        'laundry'
+
+    All other devices are labeled 'non_shiftable'.
+    """
+    name_l = device_name.lower()
+
+    shiftable_keywords = [
+        "dishwasher",
+        "washing machine",
+        "washing_machine",
+        "dryer",
+        "tumble dryer",
+        "wm",
+        "dw",
+        "laundry",
+    ]
+
+    for kw in shiftable_keywords:
+        if kw in name_l:
+            return "shiftable"
+
+    return "non_shiftable"
+
+
+def classify_devices(device_names: Iterable[str]) -> pd.DataFrame:
+    """
+    Classify a collection of device names into 'shiftable' vs 'non_shiftable'
+    based strictly on deterministic keyword rules.
+
+    Parameters
+    ----------
+    device_names : Iterable[str]
+        Sequence of raw device/column names from the load dataset.
+
+    Returns
+    -------
+    pd.DataFrame
+        Table with columns:
+            - 'device_name'
+            - 'category'  (either 'shiftable' or 'non_shiftable')
+        Every device appears exactly once.
+    """
+    rows = []
+    for name in device_names:
+        category = classify_device_name(name)
+        rows.append({"device_name": name, "category": category})
+    return pd.DataFrame(rows, columns=["device_name", "category"])
+
+
 __all__ = [
     "RecursivePVForecaster",
     "evaluate_forecast",
     "time_series_train_val_test_split",
     "plot_forecast",
+    "forecast_pv_timeseries",
+    "forecast_non_shiftable_load_seasonal_naive",
+    "ShiftableDevice",
+    "compute_shiftable_load_profiles",
+    "classify_device_name",
+    "classify_devices",
 ]
 

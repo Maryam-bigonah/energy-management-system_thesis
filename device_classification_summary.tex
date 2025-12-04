@@ -1,0 +1,171 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[margin=2cm]{geometry}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{caption}
+\captionsetup[table]{skip=4pt}
+
+\begin{document}
+
+\title{Device Classification Summary\\\large Shiftable vs.\ Non-shiftable Loads}
+\author{CHR54 Retired Couple, no work}
+\date{}
+\maketitle
+
+\section*{Overview}
+
+This document summarizes the deterministic device classification used in the forecasting pipeline. Devices are labeled as:
+\begin{itemize}
+  \item \textbf{shiftable} if their name contains any of the following substrings (case-insensitive): \texttt{dishwasher}, \texttt{washing machine}, \texttt{washing\_machine}, \texttt{dryer}, \texttt{tumble dryer}, \texttt{wm}, \texttt{dw}, \texttt{laundry}.
+  \item \textbf{non\_shiftable} otherwise.
+\end{itemize}
+
+No learning or statistical analysis is used; the rules are purely keyword-based and reproducible.
+
+\section{DeviceProfiles.HH1.Electricity.csv}
+
+\begin{longtable}{@{}p{0.75\textwidth}p{0.18\textwidth}@{}}
+\toprule
+\textbf{device\_name} & \textbf{category} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{device\_name} & \textbf{category} \\
+\midrule
+\endhead
+Electricity.Timestep & non\_shiftable \\
+Time & non\_shiftable \\
+HH1 - Living room - Living Room Light (200W) [kWh] & non\_shiftable \\
+HH1 - Kitchen - Kitchen Light (100W) [kWh] & non\_shiftable \\
+HH1 - Bath - Bathroom Light (200W) [kWh] & non\_shiftable \\
+HH1 - Bath - Bathroom Mirror Light 100W (Conventional) [kWh] & non\_shiftable \\
+HH1 - Bedroom - Bedroom Light (60W) [kWh] & non\_shiftable \\
+HH1 - Children's room - Children Room Light (200W) [kWh] & non\_shiftable \\
+HH1 - Kitchen - Egg Cooker / Russell Hobbs 14048-56 Stylo [kWh] & non\_shiftable \\
+HH1 - Kitchen - Moulinex electronic 833 [kWh] & non\_shiftable \\
+HH1 - Kitchen - Kitchen radio / AEG KRC 4323 CD [kWh] & non\_shiftable \\
+HH1 - Kitchen - Kitchen Stove / Bauknecht Heko 750 PT Kitchen stove front left [kWh] & non\_shiftable \\
+HH1 - Kitchen - Coffee Machine / Braun KF 580E [kWh] & non\_shiftable \\
+HH1 - Kitchen - Food Slicer / DOMO Schneidemaschine DO521S [kWh] & non\_shiftable \\
+HH1 - Kitchen - Toaster Salco MT 400 [kWh] & non\_shiftable \\
+HH1 - Kitchen - Miele DG 1450 [kWh] & non\_shiftable \\
+HH1 - Kitchen - Handmixer / Phillips Robust HR 1581 [kWh] & non\_shiftable \\
+HH1 - Kitchen - Miele DA 249-2 [kWh] & non\_shiftable \\
+HH1 - Kitchen - Kitchen Stove / Bauknecht Heko 750 PT Kitchen stove left hind- semi aktiv [kWh] & non\_shiftable \\
+HH1 - Kitchen - Microwave / Panasonic NN-V 359 W Inverter [kWh] & non\_shiftable \\
+HH1 - Kitchen - Dishwasher Whirlpool 45cm from Ikea [kWh] & shiftable \\
+HH1 - Living room - Laptop Lenovo Thinkpad x220 [kWh] & non\_shiftable \\
+HH1 - Garden - Hedge Trimmer / Bosch AHS 550-24 ST [kWh] & non\_shiftable \\
+HH1 - Garden - Atika LH 2500 G [kWh] & non\_shiftable \\
+HH1 - Garden - Lawn Mower / Sabo 36-EL SA 752 [kWh] & non\_shiftable \\
+HH1 - Living room - SAT Receiver / Kathrein UFS913 [kWh] & non\_shiftable \\
+HH1 - Living room - Steam Iron / Phillips HI 515 [kWh] & non\_shiftable \\
+HH1 - Living room - TV Samsung LED UE40 B7090 [kWh] & non\_shiftable \\
+HH1 - Kitchen - Washing Machine AEG Lavamat 54610 [kWh] & shiftable \\
+HH1 - Living room - Osram Light Bulb Classic A 60W [kWh] & non\_shiftable \\
+HH1 - Bath - Hair Dryer Braun Silencio 1250 [kWh] & shiftable \\
+HH1 - Kitchen - Electric Kettle / Phillips Essential HD 4685/90 Schwarz [kWh] & non\_shiftable \\
+HH1 - Living room - CD/DVD Player / Phillips CD 380 [kWh] & non\_shiftable \\
+HH1 - Kitchen - Vacuum Cleaner FiF [kWh] & non\_shiftable \\
+HH1 - Children's room - SAT Receiver / Kathrein UFS913 [kWh] & non\_shiftable \\
+HH1 - Children's room - TV / Phillips 32PFL7605H [kWh] & non\_shiftable \\
+HH1 - Kitchen - Fridge with Freezer Exquisit kgc23060 [kWh] & non\_shiftable \\
+HH1 - Kitchen - Fridge with Freezer Exquisit kgc23060 [kWh].1 & non\_shiftable \\
+HH1 - Kitchen - Fridge with Freezer Exquisit kgc23060 [kWh].2 & non\_shiftable \\
+HH1 - Kitchen - Kitchen radio / AEG KRC 4323 CD [kWh].1 & non\_shiftable \\
+HH1 - Kitchen - Kitchen radio / AEG KRC 4323 CD [kWh].2 & non\_shiftable \\
+HH1 - Kitchen - Kitchen radio / AEG KRC 4323 CD [kWh].3 & non\_shiftable \\
+HH1 - Kitchen - Microwave / Panasonic NN-V 359 W Inverter [kWh].1 & non\_shiftable \\
+HH1 - Kitchen - Microwave / Panasonic NN-V 359 W Inverter [kWh].2 & non\_shiftable \\
+HH1 - Kitchen - Microwave / Panasonic NN-V 359 W Inverter [kWh].3 & non\_shiftable \\
+HH1 - Living room - Laptop Lenovo Thinkpad x220 [kWh].1 & non\_shiftable \\
+HH1 - Living room - Laptop Lenovo Thinkpad x220 [kWh].2 & non\_shiftable \\
+HH1 - Living room - Laptop Lenovo Thinkpad x220 [kWh].3 & non\_shiftable \\
+HH1 - Living room - Router / AVM FRITZ! Box Fon WLAN 7390 [kWh] & non\_shiftable \\
+HH1 - Living room - Router / AVM FRITZ! Box Fon WLAN 7390 [kWh].1 & non\_shiftable \\
+HH1 - Living room - Router / AVM FRITZ! Box Fon WLAN 7390 [kWh].2 & non\_shiftable \\
+HH1 - Bath - Electric Tooth Brush / Phillips HX9332 [kWh] & non\_shiftable \\
+HH1 - Bath - Electric Tooth Brush / Phillips HX9332 [kWh].1 & non\_shiftable \\
+HH1 - Bath - Electric Tooth Brush / Phillips HX9332 [kWh].2 & non\_shiftable \\
+HH1 - Living room - SAT Receiver / Kathrein UFS913 [kWh].1 & non\_shiftable \\
+HH1 - Living room - SAT Receiver / Kathrein UFS913 [kWh].2 & non\_shiftable \\
+HH1 - Living room - SAT Receiver / Kathrein UFS913 [kWh].3 & non\_shiftable \\
+HH1 - Living room - TV Samsung LED UE40 B7090 [kWh].1 & non\_shiftable \\
+HH1 - Living room - TV Samsung LED UE40 B7090 [kWh].2 & non\_shiftable \\
+HH1 - Living room - TV Samsung LED UE40 B7090 [kWh].3 & non\_shiftable \\
+HH1 - Living room - CD/DVD Player / Phillips CD 380 [kWh].1 & non\_shiftable \\
+HH1 - Living room - CD/DVD Player / Phillips CD 380 [kWh].2 & non\_shiftable \\
+HH1 - Living room - CD/DVD Player / Phillips CD 380 [kWh].3 & non\_shiftable \\
+HH1 - Bath - Electric Razor / Phillips PT860/16 Razor PowerTouch Plus [kWh] & non\_shiftable \\
+HH1 - Bath - Electric Razor / Phillips PT860/16 Razor PowerTouch Plus [kWh].1 & non\_shiftable \\
+HH1 - Bath - Electric Razor / Phillips PT860/16 Razor PowerTouch Plus [kWh].2 & non\_shiftable \\
+HH1 - Living room - Yamaha RX-V667 [kWh] & non\_shiftable \\
+HH1 - Living room - Yamaha RX-V667 [kWh].1 & non\_shiftable \\
+HH1 - Living room - Yamaha RX-V667 [kWh].2 & non\_shiftable \\
+HH1 - Children's room - SAT Receiver / Kathrein UFS913 [kWh].1 & non\_shiftable \\
+HH1 - Children's room - SAT Receiver / Kathrein UFS913 [kWh].2 & non\_shiftable \\
+HH1 - Children's room - SAT Receiver / Kathrein UFS913 [kWh].3 & non\_shiftable \\
+HH1 - Children's room - TV / Phillips 32PFL7605H [kWh].1 & non\_shiftable \\
+HH1 - Children's room - TV / Phillips 32PFL7605H [kWh].2 & non\_shiftable \\
+HH1 - Children's room - TV / Phillips 32PFL7605H [kWh].3 & non\_shiftable \\
+\bottomrule
+\end{longtable}
+
+\section{DeviceDurationCurves.Electricity.csv}
+
+\begin{longtable}{@{}p{0.65\textwidth}p{0.25\textwidth}@{}}
+\toprule
+\textbf{device\_name} & \textbf{category} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{device\_name} & \textbf{category} \\
+\midrule
+\endhead
+Electricity.Time & non\_shiftable \\
+Time span & non\_shiftable \\
+Living Room Light (200W) [Watt] & non\_shiftable \\
+Kitchen Light (100W) [Watt] & non\_shiftable \\
+Bathroom Light (200W) [Watt] & non\_shiftable \\
+Bathroom Mirror Light 100W (Conventional) [Watt] & non\_shiftable \\
+Bedroom Light (60W) [Watt] & non\_shiftable \\
+Children Room Light (200W) [Watt] & non\_shiftable \\
+Egg Cooker / Russell Hobbs 14048-56 Stylo [Watt] & non\_shiftable \\
+Moulinex electronic 833 [Watt] & non\_shiftable \\
+Kitchen radio / AEG KRC 4323 CD [Watt] & non\_shiftable \\
+Kitchen Stove / Bauknecht Heko 750 PT Kitchen stove front left [Watt] & non\_shiftable \\
+Coffee Machine / Braun KF 580E [Watt] & non\_shiftable \\
+Food Slicer / DOMO Schneidemaschine DO521S [Watt] & non\_shiftable \\
+Toaster Salco MT 400 [Watt] & non\_shiftable \\
+Miele DG 1450 [Watt] & non\_shiftable \\
+Handmixer / Phillips Robust HR 1581 [Watt] & non\_shiftable \\
+Miele DA 249-2 [Watt] & non\_shiftable \\
+Kitchen Stove / Bauknecht Heko 750 PT Kitchen stove left hind- semi aktiv [Watt] & non\_shiftable \\
+Microwave / Panasonic NN-V 359 W Inverter [Watt] & non\_shiftable \\
+Dishwasher Whirlpool 45cm from Ikea [Watt] & shiftable \\
+Laptop Lenovo Thinkpad x220 [Watt] & non\_shiftable \\
+Hedge Trimmer / Bosch AHS 550-24 ST [Watt] & non\_shiftable \\
+Atika LH 2500 G [Watt] & non\_shiftable \\
+Lawn Mower / Sabo 36-EL SA 752 [Watt] & non\_shiftable \\
+SAT Receiver / Kathrein UFS913 [Watt] & non\_shiftable \\
+Steam Iron / Phillips HI 515 [Watt] & non\_shiftable \\
+TV Samsung LED UE40 B7090 [Watt] & non\_shiftable \\
+Washing Machine AEG Lavamat 54610 [Watt] & shiftable \\
+Osram Light Bulb Classic A 60W [Watt] & non\_shiftable \\
+Hair Dryer Braun Silencio 1250 [Watt] & shiftable \\
+Electric Kettle / Phillips Essential HD 4685/90 Schwarz [Watt] & non\_shiftable \\
+CD/DVD Player / Phillips CD 380 [Watt] & non\_shiftable \\
+Vacuum Cleaner FiF [Watt] & non\_shiftable \\
+TV / Phillips 32PFL7605H [Watt] & non\_shiftable \\
+Fridge with Freezer Exquisit kgc23060 [Watt] & non\_shiftable \\
+Router / AVM FRITZ! Box Fon WLAN 7390 [Watt] & non\_shiftable \\
+Electric Tooth Brush / Phillips HX9332 [Watt] & non\_shiftable \\
+Electric Razor / Phillips PT860/16 Razor PowerTouch Plus [Watt] & non\_shiftable \\
+Yamaha RX-V667 [Watt] & non\_shiftable \\
+Unnamed: 40 & non\_shiftable \\
+\bottomrule
+\end{longtable}
+
+\end{document}
+
+
