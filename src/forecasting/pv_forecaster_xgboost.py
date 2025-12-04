@@ -1,9 +1,9 @@
 """
-Recursive, data-driven PV production forecasting utilities.
+Recursive, data-driven PV production forecasting utilities (XGBoost version).
 
 Implements the requirements outlined by the user:
     * 1-hour resolution, 24-hour horizon.
-    * Data-driven (GradientBoostingRegressor by default); no pvlib.
+    * Data-driven (XGBRegressor by default); no pvlib.
     * Lagged PV and weather features, future (forecast) weather, time features.
     * One-step-ahead recursive forecasting loop feeding predictions back in.
 """
@@ -16,7 +16,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.ensemble import GradientBoostingRegressor
+import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.base import RegressorMixin
 
@@ -156,6 +156,7 @@ def plot_forecast(
 class RecursivePVForecaster:
     """
     Data-driven PV production forecaster compliant with user requirements.
+    Uses XGBoost (XGBRegressor) as the default model.
     """
 
     lag_hours: int = 24
@@ -168,11 +169,12 @@ class RecursivePVForecaster:
 
     def __post_init__(self) -> None:
         if self.model is None:
-            self.model = GradientBoostingRegressor(
+            self.model = xgb.XGBRegressor(
                 n_estimators=500,
                 learning_rate=0.05,
                 max_depth=5,
                 random_state=42,
+                objective="reg:squarederror",
             )
 
     def _prepare_supervised_frame(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -294,7 +296,6 @@ class RecursivePVForecaster:
             feature_row = self._build_single_feature_row(rolling_buffer, weather_row)
             y_hat = float(self.model.predict(feature_row)[0])
             preds.append((ts, y_hat))
-            # Create new row with PV prediction and weather
             new_row_dict = {self.pv_column: y_hat}
             for col in self.weather_columns:
                 new_row_dict[col] = weather_row[col]
@@ -320,7 +321,7 @@ def forecast_pv_timeseries(
 ) -> Tuple[pd.Series, Dict[str, Dict[str, float]], RecursivePVForecaster]:
     """
     High-level helper that:
-        1) Instantiates and fits a RecursivePVForecaster.
+        1) Instantiates and fits a RecursivePVForecaster (XGBoost version).
         2) Produces a 24-hour PV forecast using the trained model.
 
     Returns
@@ -329,6 +330,7 @@ def forecast_pv_timeseries(
         24-hour ahead PV power forecast (1-hour resolution).
     metrics : dict
         Validation and test metrics returned by RecursivePVForecaster.fit().
+        Contains MAE, RMSE, nRMSE, and R² for both validation and test sets.
     forecaster : RecursivePVForecaster
         The fitted forecaster instance (for reuse or inspection).
     """
@@ -342,192 +344,11 @@ def forecast_pv_timeseries(
     return pv_forecast, metrics, forecaster
 
 
-def forecast_non_shiftable_load_seasonal_naive(
-    load_history: pd.Series,
-    forecast_start: Optional[pd.Timestamp] = None,
-    horizon_hours: int = 24,
-    season_hours: int = 168,
-) -> pd.Series:
-    """
-    Weekly seasonal naïve forecast for non-shiftable demand.
-
-    Strict rule:
-        forecast_load[t] = realized_load[t - season_hours]
-
-    Parameters
-    ----------
-    load_history : pd.Series
-        Historical non-shiftable load with 1-hour resolution and DatetimeIndex.
-    forecast_start : pd.Timestamp, optional
-        First timestamp to forecast. If None, uses last history timestamp + 1 hour.
-    horizon_hours : int
-        Forecast horizon in hours (default 24).
-    season_hours : int
-        Seasonal period in hours (default 168 = 7 days).
-    """
-    if not isinstance(load_history.index, pd.DatetimeIndex):
-        raise ValueError("load_history must use a DatetimeIndex.")
-
-    load_history = load_history.sort_index()
-
-    if forecast_start is None:
-        if len(load_history) == 0:
-            raise ValueError("load_history is empty; cannot determine forecast_start.")
-        forecast_start = load_history.index[-1] + pd.Timedelta(hours=1)
-
-    future_index = pd.date_range(start=forecast_start, periods=horizon_hours, freq="H")
-
-    values = []
-    for ts in future_index:
-        ref_time = ts - pd.Timedelta(hours=season_hours)
-        if ref_time not in load_history.index:
-            raise ValueError(
-                f"Missing historical value for reference time {ref_time}. "
-                "Ensure at least one full seasonal period (168 hours) of history is available."
-            )
-        values.append(load_history.loc[ref_time])
-
-    forecast = pd.Series(values, index=future_index, name="non_shiftable_load_forecast")
-    return forecast
-
-
-@dataclass
-class ShiftableDevice:
-    """
-    Representation of a single shiftable device.
-
-    Attributes
-    ----------
-    name : str
-        Human-readable device name (e.g. 'Dishwasher').
-    power_profile_15min_kw : pd.Series
-        Single-cycle power profile for the device with 15-minute resolution.
-        Index should be a DatetimeIndex or TimedeltaIndex at 15-minute steps.
-    earliest_start : pd.Timestamp
-        Earliest allowed start time for the device.
-    latest_end : pd.Timestamp
-        Latest allowed end time for the device.
-    """
-
-    name: str
-    power_profile_15min_kw: pd.Series
-    earliest_start: pd.Timestamp
-    latest_end: pd.Timestamp
-
-
-def compute_shiftable_load_profiles(
-    devices: Mapping[str, ShiftableDevice],
-    freq: str = "1H",
-) -> pd.DataFrame:
-    """
-    Aggregates 15-minute device power profiles into 1-hour resolution profiles.
-
-    This function does NOT perform any forecasting or scheduling. It only
-    converts the provided deterministic single-cycle profiles to the
-    requested time resolution, to be used later by the optimization layer.
-
-    Parameters
-    ----------
-    devices : Mapping[str, ShiftableDevice]
-        Dictionary-like object mapping device identifiers to ShiftableDevice
-        instances. The `name` attribute is used as the column label.
-    freq : str
-        Desired pandas offset alias for resampling (default '1H').
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame where each column corresponds to a device, and rows contain
-        the resampled power profile at the requested resolution.
-    """
-    if not devices:
-        return pd.DataFrame()
-
-    hourly_profiles: Dict[str, pd.Series] = {}
-    for dev_id, dev in devices.items():
-        series = dev.power_profile_15min_kw.sort_index()
-        if not isinstance(series.index, pd.DatetimeIndex) and not isinstance(series.index, pd.TimedeltaIndex):
-            raise ValueError(
-                f"power_profile_15min_kw for device '{dev_id}' must have a DatetimeIndex or TimedeltaIndex."
-            )
-        # Resample to desired resolution using the mean power over each hour.
-        hourly = series.resample(freq).mean()
-        hourly_profiles[dev.name] = hourly
-
-    df = pd.DataFrame(hourly_profiles)
-    return df
-
-
-def classify_device_name(device_name: str) -> str:
-    """
-    Deterministically classify a single device name as 'shiftable' or 'non_shiftable'
-    using only fixed keyword rules (no learning, no statistics).
-
-    Shiftable if the lowercased name contains ANY of:
-        'dishwasher',
-        'washing machine', 'washing_machine',
-        'dryer', 'tumble dryer',
-        'wm',
-        'dw',
-        'laundry'
-
-    All other devices are labeled 'non_shiftable'.
-    """
-    name_l = device_name.lower()
-
-    shiftable_keywords = [
-        "dishwasher",
-        "washing machine",
-        "washing_machine",
-        "dryer",
-        "tumble dryer",
-        "wm",
-        "dw",
-        "laundry",
-    ]
-
-    for kw in shiftable_keywords:
-        if kw in name_l:
-            return "shiftable"
-
-    return "non_shiftable"
-
-
-def classify_devices(device_names: Iterable[str]) -> pd.DataFrame:
-    """
-    Classify a collection of device names into 'shiftable' vs 'non_shiftable'
-    based strictly on deterministic keyword rules.
-
-    Parameters
-    ----------
-    device_names : Iterable[str]
-        Sequence of raw device/column names from the load dataset.
-
-    Returns
-    -------
-    pd.DataFrame
-        Table with columns:
-            - 'device_name'
-            - 'category'  (either 'shiftable' or 'non_shiftable')
-        Every device appears exactly once.
-    """
-    rows = []
-    for name in device_names:
-        category = classify_device_name(name)
-        rows.append({"device_name": name, "category": category})
-    return pd.DataFrame(rows, columns=["device_name", "category"])
-
-
 __all__ = [
     "RecursivePVForecaster",
     "evaluate_forecast",
     "time_series_train_val_test_split",
     "plot_forecast",
     "forecast_pv_timeseries",
-    "forecast_non_shiftable_load_seasonal_naive",
-    "ShiftableDevice",
-    "compute_shiftable_load_profiles",
-    "classify_device_name",
-    "classify_devices",
 ]
 

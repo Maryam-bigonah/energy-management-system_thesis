@@ -1,9 +1,9 @@
 """
-Recursive, data-driven PV production forecasting utilities.
+Recursive, data-driven PV production forecasting utilities (LSTM version).
 
 Implements the requirements outlined by the user:
     * 1-hour resolution, 24-hour horizon.
-    * Data-driven (GradientBoostingRegressor by default); no pvlib.
+    * Data-driven (LSTM neural network); no pvlib.
     * Lagged PV and weather features, future (forecast) weather, time features.
     * One-step-ahead recursive forecasting loop feeding predictions back in.
 """
@@ -16,9 +16,18 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.base import RegressorMixin
+from sklearn.preprocessing import StandardScaler
+
+try:
+    import tensorflow as tf
+    from tensorflow import keras
+    from tensorflow.keras import layers
+except ImportError:
+    raise ImportError(
+        "TensorFlow/Keras is required for LSTM forecasting. "
+        "Install with: pip install tensorflow>=2.10"
+    )
 
 
 RequiredColumns = Sequence[str]
@@ -152,28 +161,80 @@ def plot_forecast(
     return fig
 
 
+def _create_sequences(
+    X: np.ndarray,
+    y: np.ndarray,
+    sequence_length: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Create sequences for LSTM training.
+    
+    Parameters
+    ----------
+    X : np.ndarray
+        Feature matrix of shape (n_samples, n_features)
+    y : np.ndarray
+        Target vector of shape (n_samples,)
+    sequence_length : int
+        Length of each input sequence
+        
+    Returns
+    -------
+    X_seq : np.ndarray
+        Sequences of shape (n_samples - sequence_length, sequence_length, n_features)
+    y_seq : np.ndarray
+        Targets of shape (n_samples - sequence_length,)
+    """
+    n_samples, n_features = X.shape
+    X_seq = []
+    y_seq = []
+    
+    for i in range(sequence_length, n_samples):
+        X_seq.append(X[i - sequence_length : i])
+        y_seq.append(y[i])
+    
+    return np.array(X_seq), np.array(y_seq)
+
+
 @dataclass
 class RecursivePVForecaster:
     """
-    Data-driven PV production forecaster compliant with user requirements.
+    Data-driven PV production forecaster using LSTM neural networks.
     """
 
     lag_hours: int = 24
-    model: Optional[RegressorMixin] = None
+    model: Optional[keras.Model] = None
     weather_columns: Sequence[str] = ("temp_amb", "irr_direct", "irr_diffuse")
     pv_column: str = "pv_power"
     static_features: Optional[Mapping[str, float]] = None
     feature_order_: List[str] = field(default_factory=list, init=False)
     fitted_: bool = field(default=False, init=False)
+    scaler_X_: Optional[StandardScaler] = field(default=None, init=False)
+    scaler_y_: Optional[StandardScaler] = field(default=None, init=False)
+    sequence_length_: int = field(default=24, init=False)
 
     def __post_init__(self) -> None:
+        self.sequence_length_ = self.lag_hours
         if self.model is None:
-            self.model = GradientBoostingRegressor(
-                n_estimators=500,
-                learning_rate=0.05,
-                max_depth=5,
-                random_state=42,
-            )
+            # Default LSTM architecture will be built in fit() after we know feature dimensions
+            pass
+
+    def _build_lstm_model(self, n_features: int) -> keras.Model:
+        """
+        Build a default LSTM model architecture.
+        """
+        model = keras.Sequential(
+            [
+                layers.LSTM(64, return_sequences=True, input_shape=(self.sequence_length_, n_features)),
+                layers.Dropout(0.2),
+                layers.LSTM(32, return_sequences=False),
+                layers.Dropout(0.2),
+                layers.Dense(16, activation="relu"),
+                layers.Dense(1),
+            ]
+        )
+        model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001), loss="mse", metrics=["mae"])
+        return model
 
     def _prepare_supervised_frame(self, df: pd.DataFrame) -> pd.DataFrame:
         _validate_inputs(df, [self.pv_column, *self.weather_columns])
@@ -199,38 +260,90 @@ class RecursivePVForecaster:
         history_df: pd.DataFrame,
         val_size: float = 0.1,
         test_size: float = 0.1,
+        epochs: int = 50,
+        batch_size: int = 32,
+        verbose: int = 1,
     ) -> Dict[str, Dict[str, float]]:
         """
-        Trains the model using chronological splits.
+        Trains the LSTM model using chronological splits.
         Returns evaluation metrics for validation and test sets.
         """
         supervised = self._prepare_supervised_frame(history_df)
         X = supervised.drop(columns=["target", self.pv_column])
         y = supervised["target"]
 
+        # Store feature order
+        self.feature_order_ = list(X.columns)
+
+        # Split chronologically
         datasets = time_series_train_val_test_split(X, y, val_size=val_size, test_size=test_size)
         X_train, X_val, X_test, y_train, y_val, y_test = datasets
 
-        self.model.fit(X_train, y_train)
-        self.feature_order_ = list(X_train.columns)
+        # Scale features and targets
+        self.scaler_X_ = StandardScaler()
+        self.scaler_y_ = StandardScaler()
+
+        X_train_scaled = self.scaler_X_.fit_transform(X_train)
+        X_val_scaled = self.scaler_X_.transform(X_val)
+        X_test_scaled = self.scaler_X_.transform(X_test)
+
+        y_train_scaled = self.scaler_y_.fit_transform(y_train.values.reshape(-1, 1)).ravel()
+        y_val_scaled = self.scaler_y_.transform(y_val.values.reshape(-1, 1)).ravel()
+        y_test_scaled = self.scaler_y_.transform(y_test.values.reshape(-1, 1)).ravel()
+
+        # Create sequences for LSTM
+        X_train_seq, y_train_seq = _create_sequences(X_train_scaled, y_train_scaled, self.sequence_length_)
+        X_val_seq, y_val_seq = _create_sequences(X_val_scaled, y_val_scaled, self.sequence_length_)
+        X_test_seq, y_test_seq = _create_sequences(X_test_scaled, y_test_scaled, self.sequence_length_)
+
+        # Build model if not provided
+        if self.model is None:
+            n_features = X_train_seq.shape[2]
+            self.model = self._build_lstm_model(n_features)
+
+        # Train the model
+        self.model.fit(
+            X_train_seq,
+            y_train_seq,
+            validation_data=(X_val_seq, y_val_seq),
+            epochs=epochs,
+            batch_size=batch_size,
+            verbose=verbose,
+        )
+
         self.fitted_ = True
 
-        val_pred = pd.Series(self.model.predict(X_val), index=y_val.index)
-        test_pred = pd.Series(self.model.predict(X_test), index=y_test.index)
+        # Predict on validation and test sets
+        val_pred_scaled = self.model.predict(X_val_seq, verbose=0).ravel()
+        test_pred_scaled = self.model.predict(X_test_seq, verbose=0).ravel()
+
+        # Inverse transform predictions
+        val_pred = pd.Series(
+            self.scaler_y_.inverse_transform(val_pred_scaled.reshape(-1, 1)).ravel(),
+            index=y_val.index[self.sequence_length_ :],
+        )
+        test_pred = pd.Series(
+            self.scaler_y_.inverse_transform(test_pred_scaled.reshape(-1, 1)).ravel(),
+            index=y_test.index[self.sequence_length_ :],
+        )
+
+        # Align true values with predictions (drop first sequence_length samples)
+        y_val_aligned = y_val.iloc[self.sequence_length_ :]
+        y_test_aligned = y_test.iloc[self.sequence_length_ :]
 
         metrics = {
-            "validation": evaluate_forecast(y_val, val_pred),
-            "test": evaluate_forecast(y_test, test_pred),
+            "validation": evaluate_forecast(y_val_aligned, val_pred),
+            "test": evaluate_forecast(y_test_aligned, test_pred),
         }
         return metrics
 
-    def _build_single_feature_row(
+    def _build_single_sequence(
         self,
         buffer_df: pd.DataFrame,
         future_weather_row: pd.Series,
-    ) -> pd.DataFrame:
+    ) -> np.ndarray:
         """
-        Builds the feature row for the next prediction using the rolling buffer and the
+        Builds a sequence for LSTM prediction using the rolling buffer and the
         future weather (forecast) for the prediction timestamp.
         """
         required_cols = [self.pv_column, *self.weather_columns]
@@ -240,7 +353,11 @@ class RecursivePVForecaster:
         for col in self.weather_columns:
             assembled.loc[future_weather_row.name, col] = future_weather_row[col]
 
-        features = _add_time_features(assembled.tail(self.lag_hours + 1))
+        # Get the last sequence_length rows
+        recent = assembled.tail(self.sequence_length_)
+
+        # Add temporal features
+        features = _add_time_features(recent)
         features = _add_lagged_features(features, [self.pv_column, *self.weather_columns], self.lag_hours)
         features = _add_future_weather_features(features, self.weather_columns, horizon=1)
 
@@ -248,18 +365,16 @@ class RecursivePVForecaster:
             for key, value in self.static_features.items():
                 features[key] = value
 
-        row = features.iloc[[-1]].drop(columns=[self.pv_column], errors="ignore")
-        if self.static_features:
-            for key, value in self.static_features.items():
-                row[key] = value
-        # Replace lead columns with provided forecast (already aligned through future row assignment)
-        for col in self.weather_columns:
-            lead_col = f"{col}_lead_1"
-            if lead_col in row.columns:
-                row[lead_col] = future_weather_row[col]
+        # Drop pv_power column and select features in correct order
+        feature_cols = [col for col in self.feature_order_ if col in features.columns]
+        features_subset = features[feature_cols]
 
-        row = row[self.feature_order_] if self.feature_order_ else row
-        return row
+        # Scale the sequence
+        features_scaled = self.scaler_X_.transform(features_subset)
+
+        # Reshape to (1, sequence_length, n_features) for LSTM
+        sequence = features_scaled.reshape(1, self.sequence_length_, len(feature_cols))
+        return sequence
 
     def forecast(
         self,
@@ -291,10 +406,10 @@ class RecursivePVForecaster:
         rolling_buffer = history_df.copy()
         preds = []
         for ts, weather_row in weather_forecast_df.iterrows():
-            feature_row = self._build_single_feature_row(rolling_buffer, weather_row)
-            y_hat = float(self.model.predict(feature_row)[0])
+            sequence = self._build_single_sequence(rolling_buffer, weather_row)
+            y_hat_scaled = self.model.predict(sequence, verbose=0)[0, 0]
+            y_hat = float(self.scaler_y_.inverse_transform([[y_hat_scaled]])[0, 0])
             preds.append((ts, y_hat))
-            # Create new row with PV prediction and weather
             new_row_dict = {self.pv_column: y_hat}
             for col in self.weather_columns:
                 new_row_dict[col] = weather_row[col]
@@ -313,14 +428,17 @@ def forecast_pv_timeseries(
     history_df: pd.DataFrame,
     weather_forecast_df: pd.DataFrame,
     static_features: Optional[Mapping[str, float]] = None,
-    model: Optional[RegressorMixin] = None,
+    model: Optional[keras.Model] = None,
     lag_hours: int = 24,
     val_size: float = 0.1,
     test_size: float = 0.1,
+    epochs: int = 50,
+    batch_size: int = 32,
+    verbose: int = 1,
 ) -> Tuple[pd.Series, Dict[str, Dict[str, float]], RecursivePVForecaster]:
     """
     High-level helper that:
-        1) Instantiates and fits a RecursivePVForecaster.
+        1) Instantiates and fits a RecursivePVForecaster (LSTM version).
         2) Produces a 24-hour PV forecast using the trained model.
 
     Returns
@@ -329,6 +447,7 @@ def forecast_pv_timeseries(
         24-hour ahead PV power forecast (1-hour resolution).
     metrics : dict
         Validation and test metrics returned by RecursivePVForecaster.fit().
+        Contains MAE, RMSE, nRMSE, and R² for both validation and test sets.
     forecaster : RecursivePVForecaster
         The fitted forecaster instance (for reuse or inspection).
     """
@@ -337,185 +456,16 @@ def forecast_pv_timeseries(
         model=model,
         static_features=static_features,
     )
-    metrics = forecaster.fit(history_df, val_size=val_size, test_size=test_size)
+    metrics = forecaster.fit(
+        history_df,
+        val_size=val_size,
+        test_size=test_size,
+        epochs=epochs,
+        batch_size=batch_size,
+        verbose=verbose,
+    )
     pv_forecast = forecaster.forecast(history_df, weather_forecast_df)
     return pv_forecast, metrics, forecaster
-
-
-def forecast_non_shiftable_load_seasonal_naive(
-    load_history: pd.Series,
-    forecast_start: Optional[pd.Timestamp] = None,
-    horizon_hours: int = 24,
-    season_hours: int = 168,
-) -> pd.Series:
-    """
-    Weekly seasonal naïve forecast for non-shiftable demand.
-
-    Strict rule:
-        forecast_load[t] = realized_load[t - season_hours]
-
-    Parameters
-    ----------
-    load_history : pd.Series
-        Historical non-shiftable load with 1-hour resolution and DatetimeIndex.
-    forecast_start : pd.Timestamp, optional
-        First timestamp to forecast. If None, uses last history timestamp + 1 hour.
-    horizon_hours : int
-        Forecast horizon in hours (default 24).
-    season_hours : int
-        Seasonal period in hours (default 168 = 7 days).
-    """
-    if not isinstance(load_history.index, pd.DatetimeIndex):
-        raise ValueError("load_history must use a DatetimeIndex.")
-
-    load_history = load_history.sort_index()
-
-    if forecast_start is None:
-        if len(load_history) == 0:
-            raise ValueError("load_history is empty; cannot determine forecast_start.")
-        forecast_start = load_history.index[-1] + pd.Timedelta(hours=1)
-
-    future_index = pd.date_range(start=forecast_start, periods=horizon_hours, freq="H")
-
-    values = []
-    for ts in future_index:
-        ref_time = ts - pd.Timedelta(hours=season_hours)
-        if ref_time not in load_history.index:
-            raise ValueError(
-                f"Missing historical value for reference time {ref_time}. "
-                "Ensure at least one full seasonal period (168 hours) of history is available."
-            )
-        values.append(load_history.loc[ref_time])
-
-    forecast = pd.Series(values, index=future_index, name="non_shiftable_load_forecast")
-    return forecast
-
-
-@dataclass
-class ShiftableDevice:
-    """
-    Representation of a single shiftable device.
-
-    Attributes
-    ----------
-    name : str
-        Human-readable device name (e.g. 'Dishwasher').
-    power_profile_15min_kw : pd.Series
-        Single-cycle power profile for the device with 15-minute resolution.
-        Index should be a DatetimeIndex or TimedeltaIndex at 15-minute steps.
-    earliest_start : pd.Timestamp
-        Earliest allowed start time for the device.
-    latest_end : pd.Timestamp
-        Latest allowed end time for the device.
-    """
-
-    name: str
-    power_profile_15min_kw: pd.Series
-    earliest_start: pd.Timestamp
-    latest_end: pd.Timestamp
-
-
-def compute_shiftable_load_profiles(
-    devices: Mapping[str, ShiftableDevice],
-    freq: str = "1H",
-) -> pd.DataFrame:
-    """
-    Aggregates 15-minute device power profiles into 1-hour resolution profiles.
-
-    This function does NOT perform any forecasting or scheduling. It only
-    converts the provided deterministic single-cycle profiles to the
-    requested time resolution, to be used later by the optimization layer.
-
-    Parameters
-    ----------
-    devices : Mapping[str, ShiftableDevice]
-        Dictionary-like object mapping device identifiers to ShiftableDevice
-        instances. The `name` attribute is used as the column label.
-    freq : str
-        Desired pandas offset alias for resampling (default '1H').
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame where each column corresponds to a device, and rows contain
-        the resampled power profile at the requested resolution.
-    """
-    if not devices:
-        return pd.DataFrame()
-
-    hourly_profiles: Dict[str, pd.Series] = {}
-    for dev_id, dev in devices.items():
-        series = dev.power_profile_15min_kw.sort_index()
-        if not isinstance(series.index, pd.DatetimeIndex) and not isinstance(series.index, pd.TimedeltaIndex):
-            raise ValueError(
-                f"power_profile_15min_kw for device '{dev_id}' must have a DatetimeIndex or TimedeltaIndex."
-            )
-        # Resample to desired resolution using the mean power over each hour.
-        hourly = series.resample(freq).mean()
-        hourly_profiles[dev.name] = hourly
-
-    df = pd.DataFrame(hourly_profiles)
-    return df
-
-
-def classify_device_name(device_name: str) -> str:
-    """
-    Deterministically classify a single device name as 'shiftable' or 'non_shiftable'
-    using only fixed keyword rules (no learning, no statistics).
-
-    Shiftable if the lowercased name contains ANY of:
-        'dishwasher',
-        'washing machine', 'washing_machine',
-        'dryer', 'tumble dryer',
-        'wm',
-        'dw',
-        'laundry'
-
-    All other devices are labeled 'non_shiftable'.
-    """
-    name_l = device_name.lower()
-
-    shiftable_keywords = [
-        "dishwasher",
-        "washing machine",
-        "washing_machine",
-        "dryer",
-        "tumble dryer",
-        "wm",
-        "dw",
-        "laundry",
-    ]
-
-    for kw in shiftable_keywords:
-        if kw in name_l:
-            return "shiftable"
-
-    return "non_shiftable"
-
-
-def classify_devices(device_names: Iterable[str]) -> pd.DataFrame:
-    """
-    Classify a collection of device names into 'shiftable' vs 'non_shiftable'
-    based strictly on deterministic keyword rules.
-
-    Parameters
-    ----------
-    device_names : Iterable[str]
-        Sequence of raw device/column names from the load dataset.
-
-    Returns
-    -------
-    pd.DataFrame
-        Table with columns:
-            - 'device_name'
-            - 'category'  (either 'shiftable' or 'non_shiftable')
-        Every device appears exactly once.
-    """
-    rows = []
-    for name in device_names:
-        category = classify_device_name(name)
-        rows.append({"device_name": name, "category": category})
-    return pd.DataFrame(rows, columns=["device_name", "category"])
 
 
 __all__ = [
@@ -524,10 +474,5 @@ __all__ = [
     "time_series_train_val_test_split",
     "plot_forecast",
     "forecast_pv_timeseries",
-    "forecast_non_shiftable_load_seasonal_naive",
-    "ShiftableDevice",
-    "compute_shiftable_load_profiles",
-    "classify_device_name",
-    "classify_devices",
 ]
 

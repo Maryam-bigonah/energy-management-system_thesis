@@ -40,13 +40,28 @@ def _read_pvgis_timeseries(filepath: Path) -> pd.DataFrame:
                 break
             skiprows += 1
 
-    df = pd.read_csv(filepath, skiprows=skiprows)
+    df = pd.read_csv(filepath, skiprows=skiprows, low_memory=False)
+    
     # Parse the PVGIS time format YYYYMMDD:HHMM into a proper datetime index
     def _parse_pvgis_time(s: str) -> pd.Timestamp:
-        date_part, time_part = s.split(":")
-        return pd.to_datetime(date_part + time_part, format="%Y%m%d%H%M")
+        try:
+            if ":" in str(s) and len(str(s)) > 10:
+                date_part, time_part = str(s).split(":")
+                return pd.to_datetime(date_part + time_part, format="%Y%m%d%H%M")
+            else:
+                return pd.NaT
+        except:
+            return pd.NaT
 
     df["time"] = df["time"].astype(str).map(_parse_pvgis_time)
+    # Drop rows with invalid timestamps
+    df = df.dropna(subset=["time"])
+    
+    # Convert numeric columns to float (excluding time)
+    numeric_cols = [col for col in df.columns if col != "time"]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    
     df = df.set_index("time").sort_index()
     return df
 
@@ -83,7 +98,7 @@ def load_pvgis_weather_hourly(filepath: Path) -> pd.DataFrame:
     weather_10min = df[["irr_direct", "irr_diffuse", "temp_amb"]]
 
     # Aggregate to hourly resolution (mean over 10-minute steps within each hour)
-    weather_hourly = weather_10min.resample("1H").mean()
+    weather_hourly = weather_10min.resample("1h").mean()
     return weather_hourly
 
 
