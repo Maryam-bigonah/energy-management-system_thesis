@@ -289,6 +289,10 @@ def main():
         available_models.append(metrics_lstm)
         model_names.append("LSTM")
     
+    # Define output directory early so it's always available
+    output_dir = Path(__file__).parent / "results"
+    output_dir.mkdir(exist_ok=True)
+    
     if len(available_models) > 0:
         comparison_data = {
             "Model": model_names,
@@ -305,8 +309,6 @@ def main():
         print(comparison_df.to_string(index=False))
         
         # Save comparison
-        output_dir = Path(__file__).parent / "results"
-        output_dir.mkdir(exist_ok=True)
         comparison_df.to_csv(output_dir / "model_comparison.csv", index=False)
         print(f"\n  ✓ Comparison saved to: {output_dir / 'model_comparison.csv'}")
         
