@@ -703,6 +703,152 @@
             }
         }
 
+        async function runNonShiftableForecast() {
+            document.getElementById('forecasts-loading').style.display = 'block';
+            document.getElementById('forecasts-content').innerHTML = '';
+            
+            try {
+                const response = await fetch(`${API_BASE}/forecast/non_shiftable`);
+                const data = await response.json();
+                
+                if (!data.available) {
+                    document.getElementById('forecasts-loading').style.display = 'none';
+                    document.getElementById('forecasts-content').innerHTML = 
+                        `<div class="error">${data.error || 'Forecast not available'}</div>`;
+                    return;
+                }
+                
+                let html = `
+                    <div style="margin: 30px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                        <h3 style="color: #667eea; margin-bottom: 20px;">Non-Shiftable Load Forecast (Seasonal Naive)</h3>
+                        
+                        <div class="image-container" style="margin-bottom: 30px;">
+                            <img src="data:image/png;base64,${data.image}" alt="Non-Shiftable Load Forecast">
+                        </div>
+                        
+                        <h4 style="margin: 20px 0 10px 0;">Forecast Summary</h4>
+                        <table>
+                            <tr>
+                                <th>Property</th>
+                                <th>Value</th>
+                            </tr>
+                            <tr>
+                                <td><strong>Method</strong></td>
+                                <td>${data.method || 'Weekly Seasonal Naive (168-hour period)'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Forecast Horizon</strong></td>
+                                <td>24 hours</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Mean Forecast (kW)</strong></td>
+                                <td>${data.statistics ? data.statistics.mean.toFixed(6) : 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Max Forecast (kW)</strong></td>
+                                <td>${data.statistics ? data.statistics.max.toFixed(6) : 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Min Forecast (kW)</strong></td>
+                                <td>${data.statistics ? data.statistics.min.toFixed(6) : 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Std Forecast (kW)</strong></td>
+                                <td>${data.statistics ? data.statistics.std.toFixed(6) : 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Total Forecast (kWh)</strong></td>
+                                <td>${data.statistics ? data.statistics.total.toFixed(6) : 'N/A'}</td>
+                            </tr>
+                        </table>
+                        
+                        <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px;">
+                            <h4>How it works:</h4>
+                            <p>${data.description || 'The seasonal naive method forecasts each hour by using the load from exactly one week (168 hours) earlier:'}</p>
+                            <p style="font-family: monospace; background: white; padding: 10px; border-radius: 5px;">
+                                forecast_load[t] = realized_load[t - 168 hours]
+                            </p>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('forecasts-loading').style.display = 'none';
+                document.getElementById('forecasts-content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('forecasts-loading').style.display = 'none';
+                document.getElementById('forecasts-content').innerHTML = 
+                    `<div class="error">Error running non-shiftable forecast: ${error.message}</div>`;
+            }
+        }
+
+        async function loadShiftableProfiles() {
+            document.getElementById('forecasts-loading').style.display = 'block';
+            document.getElementById('forecasts-content').innerHTML = '';
+            
+            try {
+                const response = await fetch(`${API_BASE}/data/overview`);
+                const data = await response.json();
+                
+                const shiftableData = data.shiftable_load;
+                
+                let html = `
+                    <div style="margin: 30px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                        <h3 style="color: #667eea; margin-bottom: 20px;">Shiftable Device Profiles</h3>
+                        
+                        <div style="margin-bottom: 20px; padding: 15px; background: #fff3cd; border-radius: 8px;">
+                            <h4>Note:</h4>
+                            <p>Shiftable devices are <strong>not forecasted</strong>. Instead, each device has a deterministic power profile that can be scheduled within its allowed operating window.</p>
+                        </div>
+                        
+                        <h4 style="margin: 20px 0 10px 0;">Available Shiftable Devices</h4>
+                        <table>
+                            <tr>
+                                <th>Device Name</th>
+                                <th>Description</th>
+                            </tr>
+                `;
+                
+                if (shiftableData && shiftableData.devices && shiftableData.devices.length > 0) {
+                    for (const device of shiftableData.devices) {
+                        html += `
+                            <tr>
+                                <td><strong>${device}</strong></td>
+                                <td>Power profile available for scheduling optimization</td>
+                            </tr>
+                        `;
+                    }
+                } else {
+                    html += `
+                        <tr>
+                            <td colspan="2">No shiftable devices found</td>
+                        </tr>
+                    `;
+                }
+                
+                html += `
+                        </table>
+                        
+                        <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px;">
+                            <h4>How shiftable loads work:</h4>
+                            <ul style="margin-left: 20px;">
+                                <li>Each device has a predefined 15-minute power profile for one complete cycle</li>
+                                <li>Each device has an allowed operating window (earliest start → latest end)</li>
+                                <li>These profiles are deterministic inputs for the optimization layer</li>
+                                <li>No forecasting is needed - the profiles are fixed and can be time-shifted</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('forecasts-loading').style.display = 'none';
+                document.getElementById('forecasts-content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('forecasts-loading').style.display = 'none';
+                document.getElementById('forecasts-content').innerHTML = 
+                    `<div class="error">Error loading shiftable profiles: ${error.message}</div>`;
+            }
+        }
+
         // Load initial tab on page load
         window.onload = function() {
             loadOverview();
