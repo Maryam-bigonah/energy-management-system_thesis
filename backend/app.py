@@ -531,6 +531,109 @@ def run_forecasts():
     return jsonify(results)
 
 
+@app.route('/api/forecast/individual/<model_name>')
+def forecast_individual(model_name):
+    """Get individual forecast results and visualization for a specific model."""
+    history_df, _ = load_all_data()
+    weather_forecast_df = history_df[["temp_amb", "irr_direct", "irr_diffuse"]].iloc[-24:].copy()
+    weather_forecast_df.index = history_df.index[-24:] + pd.Timedelta(days=1)
+    static_features = {"tilt_deg": 40, "azimuth_deg": 2, "capacity_kw": 15.0}
+    
+    model_name_lower = model_name.lower()
+    forecast_func = None
+    model_display_name = ""
+    
+    if model_name_lower == "gradientboosting":
+        forecast_func = forecast_gb
+        model_display_name = "GradientBoosting"
+    elif model_name_lower == "xgboost" and XGBOOST_AVAILABLE and forecast_xgb:
+        forecast_func = forecast_xgb
+        model_display_name = "XGBoost"
+    elif model_name_lower == "lstm" and LSTM_AVAILABLE and forecast_lstm:
+        forecast_func = forecast_lstm
+        model_display_name = "LSTM"
+    else:
+        return jsonify({'error': f'Model {model_name} not available'}), 404
+    
+    try:
+        # Run forecast
+        if model_name_lower == "lstm":
+            pv_forecast, metrics, _ = forecast_func(
+                history_df=history_df, weather_forecast_df=weather_forecast_df,
+                static_features=static_features, lag_hours=24, val_size=0.1, test_size=0.1,
+                epochs=20, batch_size=32, verbose=0,
+            )
+        else:
+            pv_forecast, metrics, _ = forecast_func(
+                history_df=history_df, weather_forecast_df=weather_forecast_df,
+                static_features=static_features, lag_hours=24, val_size=0.1, test_size=0.1,
+            )
+        
+        # Create individual visualization
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        
+        # 1. Forecast time series
+        ax1 = axes[0, 0]
+        ax1.plot(pv_forecast.index, pv_forecast.values, marker='o', linewidth=2, 
+                markersize=6, color='steelblue', label='Forecast')
+        ax1.set_title(f'{model_display_name}: 24-Hour PV Forecast', fontsize=14, fontweight='bold')
+        ax1.set_xlabel('Time')
+        ax1.set_ylabel('PV Power (kW)')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        
+        # 2. Validation metrics
+        ax2 = axes[0, 1]
+        val_metrics = ['MAE', 'RMSE']
+        val_values = [metrics['validation']['mae'], metrics['validation']['rmse']]
+        ax2.bar(val_metrics, val_values, color='coral', alpha=0.7)
+        ax2.set_title('Validation Set Metrics', fontsize=14, fontweight='bold')
+        ax2.set_ylabel('Error (kW)')
+        ax2.grid(True, alpha=0.3, axis='y')
+        
+        # 3. Test metrics
+        ax3 = axes[1, 0]
+        test_metrics = ['MAE', 'RMSE']
+        test_values = [metrics['test']['mae'], metrics['test']['rmse']]
+        ax3.bar(test_metrics, test_values, color='green', alpha=0.7)
+        ax3.set_title('Test Set Metrics', fontsize=14, fontweight='bold')
+        ax3.set_ylabel('Error (kW)')
+        ax3.grid(True, alpha=0.3, axis='y')
+        
+        # 4. R² comparison
+        ax4 = axes[1, 1]
+        r2_data = {
+            'Validation': metrics['validation']['r2'],
+            'Test': metrics['test']['r2']
+        }
+        ax4.bar(r2_data.keys(), r2_data.values(), color=['coral', 'green'], alpha=0.7)
+        ax4.set_title('Coefficient of Determination (R²)', fontsize=14, fontweight='bold')
+        ax4.set_ylabel('R²')
+        ax4.set_ylim([0, 1])
+        ax4.grid(True, alpha=0.3, axis='y')
+        
+        plt.tight_layout()
+        img_base64 = fig_to_base64(fig)
+        
+        # Convert forecast to dict with string keys for JSON serialization
+        forecast_dict = {str(k): float(v) for k, v in pv_forecast.items()}
+        
+        return jsonify({
+            'model': model_display_name,
+            'forecast': forecast_dict,
+            'metrics': metrics,
+            'image': img_base64,
+            'available': True,
+        })
+    except Exception as e:
+        return jsonify({
+            'model': model_display_name,
+            'available': False,
+            'error': str(e),
+        }), 500
+
+
 @app.route('/api/forecast/visualization')
 def forecast_visualization():
     """Generate visualization comparing all forecasting models."""

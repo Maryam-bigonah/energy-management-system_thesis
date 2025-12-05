@@ -594,39 +594,100 @@
             }
         }
 
+        async function loadIndividualForecast(modelName) {
+            try {
+                const response = await fetch(`${API_BASE}/forecast/individual/${modelName}`);
+                const data = await response.json();
+                
+                if (!data.available) {
+                    return `<div class="error">${data.error || 'Model not available'}</div>`;
+                }
+                
+                let html = `
+                    <div style="margin: 30px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                        <h3 style="color: #667eea; margin-bottom: 20px;">${data.model} Forecast Results</h3>
+                        
+                        <div class="image-container" style="margin-bottom: 30px;">
+                            <img src="data:image/png;base64,${data.image}" alt="${data.model} Forecast">
+                        </div>
+                        
+                        <h4 style="margin: 20px 0 10px 0;">Performance Metrics</h4>
+                        <table>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Validation Set</th>
+                                <th>Test Set</th>
+                            </tr>
+                            <tr>
+                                <td><strong>MAE (kW)</strong></td>
+                                <td>${data.metrics.validation.mae.toFixed(6)}</td>
+                                <td>${data.metrics.test.mae.toFixed(6)}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>RMSE (kW)</strong></td>
+                                <td>${data.metrics.validation.rmse.toFixed(6)}</td>
+                                <td>${data.metrics.test.rmse.toFixed(6)}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>nRMSE</strong></td>
+                                <td>${data.metrics.validation.nrmse.toFixed(6)}</td>
+                                <td>${data.metrics.test.nrmse.toFixed(6)}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>R²</strong></td>
+                                <td>${data.metrics.validation.r2.toFixed(6)}</td>
+                                <td>${data.metrics.test.r2.toFixed(6)}</td>
+                            </tr>
+                        </table>
+                    </div>
+                `;
+                
+                return html;
+            } catch (error) {
+                return `<div class="error">Error loading ${modelName}: ${error.message}</div>`;
+            }
+        }
+
         async function runForecasts() {
             document.getElementById('forecasts-loading').style.display = 'block';
             document.getElementById('forecasts-content').innerHTML = '';
             
             try {
-                const response = await fetch(`${API_BASE}/forecast/run`);
-                const results = await response.json();
+                // Load individual forecasts for each model
+                let html = '<h2 class="section-title">PV Forecasting Results</h2>';
+                html += '<p style="margin-bottom: 20px;">Detailed results for each forecasting model:</p>';
                 
-                let html = '<h3>Forecast Results</h3>';
+                // GradientBoosting
+                html += await loadIndividualForecast('gradientboosting');
                 
-                for (const [model, result] of Object.entries(results)) {
-                    html += `<div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">`;
-                    html += `<h4>${model.charAt(0).toUpperCase() + model.slice(1)}</h4>`;
-                    
-                    if (result.available) {
-                        html += `<p style="color: green;">✓ Forecast completed successfully</p>`;
-                        html += `<p><strong>Validation MAE:</strong> ${result.metrics.validation.mae.toFixed(6)} kW</p>`;
-                        html += `<p><strong>Test MAE:</strong> ${result.metrics.test.mae.toFixed(6)} kW</p>`;
-                        html += `<p><strong>Test R²:</strong> ${result.metrics.test.r2.toFixed(6)}</p>`;
-                    } else {
-                        html += `<p style="color: red;">✗ ${result.error || 'Not available'}</p>`;
-                    }
-                    
-                    html += `</div>`;
+                // XGBoost
+                try {
+                    html += await loadIndividualForecast('xgboost');
+                } catch (e) {
+                    html += `<div style="margin: 20px 0; padding: 15px; background: #fff3cd; border-radius: 8px;">
+                        <h4>XGBoost</h4>
+                        <p style="color: #856404;">⚠️ XGBoost not available (missing dependencies)</p>
+                    </div>`;
                 }
                 
-                html += '<p style="margin-top: 20px;"><em>Note: Refresh the Forecast Visualization tab to see updated charts.</em></p>';
+                // LSTM
+                try {
+                    html += await loadIndividualForecast('lstm');
+                } catch (e) {
+                    html += `<div style="margin: 20px 0; padding: 15px; background: #fff3cd; border-radius: 8px;">
+                        <h4>LSTM</h4>
+                        <p style="color: #856404;">⚠️ LSTM not available (TensorFlow not installed)</p>
+                    </div>`;
+                }
+                
+                html += '<div style="margin-top: 30px; padding: 15px; background: #e7f3ff; border-radius: 8px;">';
+                html += '<h4>Model Comparison</h4>';
+                html += '<p>Click the button below to see a side-by-side comparison of all models.</p>';
+                html += '<button class="tab-button" onclick="loadForecastViz()" style="margin-top: 10px;">📊 View Comparison Chart</button>';
+                html += '</div>';
                 
                 document.getElementById('forecasts-loading').style.display = 'none';
                 document.getElementById('forecasts-content').innerHTML = html;
-                
-                // Auto-refresh visualization
-                setTimeout(loadForecastViz, 2000);
             } catch (error) {
                 document.getElementById('forecasts-loading').style.display = 'none';
                 document.getElementById('forecasts-content').innerHTML = 
