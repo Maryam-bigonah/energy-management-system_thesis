@@ -619,10 +619,27 @@ def forecast_individual(model_name):
         # Convert forecast to dict with string keys for JSON serialization
         forecast_dict = {str(k): float(v) for k, v in pv_forecast.items()}
         
+        # Ensure metrics are JSON-serializable (convert any Timestamps or other non-serializable types)
+        def make_json_serializable(obj):
+            if isinstance(obj, dict):
+                return {str(k): make_json_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, (list, tuple)):
+                return [make_json_serializable(item) for item in obj]
+            elif isinstance(obj, (pd.Timestamp, pd.Timedelta)):
+                return str(obj)
+            elif isinstance(obj, (np.integer, np.floating)):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            else:
+                return obj
+        
+        serializable_metrics = make_json_serializable(metrics)
+        
         return jsonify({
             'model': model_display_name,
             'forecast': forecast_dict,
-            'metrics': metrics,
+            'metrics': serializable_metrics,
             'image': img_base64,
             'available': True,
         })
@@ -726,7 +743,24 @@ def forecast_visualization():
     plt.tight_layout()
     img_base64 = fig_to_base64(fig)
     
-    return jsonify({'image': img_base64, 'metrics': metrics_dict})
+    # Ensure metrics are JSON-serializable
+    def make_json_serializable(obj):
+        if isinstance(obj, dict):
+            return {str(k): make_json_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [make_json_serializable(item) for item in obj]
+        elif isinstance(obj, (pd.Timestamp, pd.Timedelta)):
+            return str(obj)
+        elif isinstance(obj, (np.integer, np.floating)):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return obj
+    
+    serializable_metrics = make_json_serializable(metrics_dict)
+    
+    return jsonify({'image': img_base64, 'metrics': serializable_metrics})
 
 
 @app.route('/api/forecast/non_shiftable')
