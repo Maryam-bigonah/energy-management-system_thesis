@@ -23,7 +23,6 @@ sys.path.insert(0, str(project_root / "src"))
 
 from forecasting.data_loading import (
     load_pvgis_weather_hourly,
-    load_openweather_hourly,
     merge_pv_weather_sources,
 )
 from forecasting.pv_forecaster import forecast_pv_timeseries as forecast_gb
@@ -56,7 +55,6 @@ CORS(app)
 # Data paths
 DATA_DIR = Path("/Users/mariabigonah/Desktop/thesis/building database")
 PVGIS_PATH = DATA_DIR / "Timeseries_45.044_7.639_SA3_40deg_2deg_2005_2023.csv"
-OPENWEATHER_PATH = DATA_DIR / "openweather_historical.csv"
 
 # Cache for loaded data
 _data_cache = {}
@@ -70,13 +68,12 @@ def estimate_pv_from_irradiance(irr_direct, irr_diffuse, temp_amb, capacity_kw=1
 
 
 def load_all_data():
-    """Load and cache all data sources."""
+    """Load and cache all data sources (PVGIS only)."""
     if 'history_df' in _data_cache:
-        return _data_cache['history_df'], _data_cache['pvgis'], _data_cache['openweather']
+        return _data_cache['history_df'], _data_cache['pvgis']
     
     print("Loading data...")
     pvgis_hourly = load_pvgis_weather_hourly(PVGIS_PATH)
-    openweather_hourly = load_openweather_hourly(OPENWEATHER_PATH)
     
     # Estimate PV power
     pv_power = estimate_pv_from_irradiance(
@@ -85,11 +82,10 @@ def load_all_data():
         pvgis_hourly["temp_amb"],
     )
     
-    # Merge data
+    # Merge data (PVGIS only, no OpenWeather)
     history_df = merge_pv_weather_sources(
         pv_power=pv_power,
         pvgis_hourly=pvgis_hourly,
-        openweather_hourly=openweather_hourly,
     )
     
     # Use last 2 years for faster processing
@@ -98,9 +94,8 @@ def load_all_data():
     
     _data_cache['history_df'] = history_df
     _data_cache['pvgis'] = pvgis_hourly
-    _data_cache['openweather'] = openweather_hourly
     
-    return history_df, pvgis_hourly, openweather_hourly
+    return history_df, pvgis_hourly
 
 
 def fig_to_base64(fig):
@@ -121,8 +116,8 @@ def index():
 
 @app.route('/api/data/overview')
 def data_overview():
-    """Get overview statistics for all databases."""
-    history_df, pvgis, openweather = load_all_data()
+    """Get overview statistics for all databases (PVGIS only)."""
+    history_df, pvgis = load_all_data()
     
     overview = {
         'pvgis': {
@@ -135,18 +130,8 @@ def data_overview():
             },
             'statistics': pvgis.describe().to_dict(),
         },
-        'openweather': {
-            'name': 'OpenWeather Historical',
-            'rows': len(openweather),
-            'columns': list(openweather.columns) if len(openweather) > 0 else [],
-            'date_range': {
-                'start': openweather.index.min().isoformat() if len(openweather) > 0 else None,
-                'end': openweather.index.max().isoformat() if len(openweather) > 0 else None,
-            },
-            'statistics': openweather.describe().to_dict() if len(openweather) > 0 else {},
-        },
         'merged': {
-            'name': 'Merged Dataset',
+            'name': 'Merged Dataset (PVGIS)',
             'rows': len(history_df),
             'columns': list(history_df.columns),
             'date_range': {
@@ -163,7 +148,7 @@ def data_overview():
 @app.route('/api/data/features')
 def get_features():
     """Get detailed feature information."""
-    history_df, _, _ = load_all_data()
+    history_df, _ = load_all_data()
     
     features = {}
     for col in history_df.columns:
@@ -185,7 +170,7 @@ def get_features():
 @app.route('/api/data/covariance')
 def get_covariance():
     """Get covariance matrix and visualization."""
-    history_df, _, _ = load_all_data()
+    history_df, _ = load_all_data()
     
     # Select numeric columns only
     numeric_cols = history_df.select_dtypes(include=[np.number]).columns
@@ -210,7 +195,7 @@ def get_covariance():
 @app.route('/api/data/visualization')
 def data_visualization():
     """Generate database visualization figures."""
-    history_df, pvgis, openweather = load_all_data()
+    history_df, pvgis = load_all_data()
     
     # Create comprehensive visualization
     fig = plt.figure(figsize=(16, 12))
@@ -277,7 +262,7 @@ def data_visualization():
 @app.route('/api/forecast/run')
 def run_forecasts():
     """Run all available forecasting models and return results."""
-    history_df, _, _ = load_all_data()
+    history_df, _ = load_all_data()
     
     # Prepare forecast weather (use last 24 hours as "forecast")
     weather_forecast_df = history_df[["temp_amb", "irr_direct", "irr_diffuse"]].iloc[-24:].copy()
@@ -373,7 +358,7 @@ def run_forecasts():
 def forecast_visualization():
     """Generate visualization comparing all forecasting models."""
     # Run forecasts first
-    history_df, _, _ = load_all_data()
+    history_df, _ = load_all_data()
     weather_forecast_df = history_df[["temp_amb", "irr_direct", "irr_diffuse"]].iloc[-24:].copy()
     weather_forecast_df.index = history_df.index[-24:] + pd.Timedelta(days=1)
     static_features = {"tilt_deg": 40, "azimuth_deg": 2, "capacity_kw": 15.0}

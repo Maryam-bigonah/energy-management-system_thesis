@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from forecasting.data_loading import (
     load_pvgis_weather_hourly,
-    load_openweather_hourly,
     merge_pv_weather_sources,
 )
 from forecasting.pv_forecaster import forecast_pv_timeseries as forecast_gb
@@ -48,19 +47,9 @@ print()
 # Load data
 print("Loading data...")
 pvgis_path = Path("/Users/mariabigonah/Desktop/thesis/building database/Timeseries_45.044_7.639_SA3_40deg_2deg_2005_2023.csv")
-openweather_path = Path("/Users/mariabigonah/Desktop/thesis/building database/openweather_historical.csv")
 
 pvgis_hourly = load_pvgis_weather_hourly(pvgis_path)
 print(f"PVGIS data: {len(pvgis_hourly)} hours")
-
-# Try loading OpenWeather (optional)
-try:
-    openweather_hourly = load_openweather_hourly(openweather_path)
-    print(f"OpenWeather data: {len(openweather_hourly)} hours")
-    use_openweather = len(openweather_hourly) > 1000  # Only use if substantial data
-except:
-    openweather_hourly = None
-    use_openweather = False
 
 # Estimate PV power
 pv_power = estimate_pv_from_irradiance(
@@ -70,13 +59,9 @@ pv_power = estimate_pv_from_irradiance(
     capacity_kw=15.0
 )
 
-# Merge (use PVGIS only for training to get more data)
-if use_openweather:
-    history_df = merge_pv_weather_sources(pv_power, pvgis_hourly, openweather_hourly)
-    print(f"Merged dataset: {len(history_df)} hours")
-else:
-    history_df = merge_pv_weather_sources(pv_power, pvgis_hourly, None)
-    print(f"Using PVGIS only: {len(history_df)} hours")
+# Merge (PVGIS only)
+history_df = merge_pv_weather_sources(pv_power, pvgis_hourly)
+print(f"Dataset: {len(history_df)} hours")
 
 # Need at least several months of data for training
 # Use last 2 years if available, otherwise use all available data

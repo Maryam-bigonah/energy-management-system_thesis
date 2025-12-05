@@ -3,7 +3,7 @@ Comprehensive script to run all three PV forecasting models (GradientBoosting, X
 with the user's actual data and generate comparison results.
 
 This script:
-1. Loads PVGIS and OpenWeather data
+1. Loads PVGIS data only
 2. Estimates PV power from irradiance (for demonstration - replace with actual measurements)
 3. Trains all three models
 4. Generates forecasts and evaluation metrics
@@ -22,7 +22,6 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from forecasting.data_loading import (
     load_pvgis_weather_hourly,
-    load_openweather_hourly,
     merge_pv_weather_sources,
 )
 from forecasting.pv_forecaster import forecast_pv_timeseries as forecast_gb
@@ -86,21 +85,15 @@ def main():
     
     # Data paths
     pvgis_path = Path("/Users/mariabigonah/Desktop/thesis/building database/Timeseries_45.044_7.639_SA3_40deg_2deg_2005_2023.csv")
-    openweather_path = Path("/Users/mariabigonah/Desktop/thesis/building database/openweather_historical.csv")
     
     print("Step 1: Loading weather data...")
     print(f"  - PVGIS file: {pvgis_path.name}")
-    print(f"  - OpenWeather file: {openweather_path.name}")
     
     try:
-        # Load weather data
+        # Load weather data (PVGIS only)
         pvgis_hourly = load_pvgis_weather_hourly(pvgis_path)
         print(f"  ✓ Loaded PVGIS data: {len(pvgis_hourly)} hours")
         print(f"    Date range: {pvgis_hourly.index.min()} to {pvgis_hourly.index.max()}")
-        
-        openweather_hourly = load_openweather_hourly(openweather_path)
-        print(f"  ✓ Loaded OpenWeather data: {len(openweather_hourly)} hours")
-        print(f"    Date range: {openweather_hourly.index.min()} to {openweather_hourly.index.max()}")
         
     except Exception as e:
         print(f"  ✗ Error loading data: {e}")
@@ -124,11 +117,10 @@ def main():
     print()
     print("Step 3: Merging data sources...")
     
-    # Merge all data
+    # Merge data (PVGIS only)
     history_df = merge_pv_weather_sources(
         pv_power=pv_power,
         pvgis_hourly=pvgis_hourly,
-        openweather_hourly=openweather_hourly,
     )
     
     print(f"  ✓ Merged dataset: {len(history_df)} hours")
