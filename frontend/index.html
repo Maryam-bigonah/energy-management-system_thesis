@@ -252,10 +252,18 @@
 
         <!-- Forecasting Results Tab -->
         <div id="forecasts" class="tab-content">
-            <h2 class="section-title">PV Forecasting Results</h2>
-            <button class="tab-button" onclick="runForecasts()" style="margin-bottom: 20px;">
-                🚀 Run Forecasts
-            </button>
+            <h2 class="section-title">Forecasting Results</h2>
+            <div style="margin-bottom: 20px;">
+                <button class="tab-button" onclick="runForecasts()" style="margin-right: 10px;">
+                    ⚡ Run PV Forecasts
+                </button>
+                <button class="tab-button" onclick="runNonShiftableForecast()" style="margin-right: 10px;">
+                    📊 Run Non-Shiftable Load Forecast
+                </button>
+                <button class="tab-button" onclick="loadForecastViz()">
+                    📈 View Comparison Chart
+                </button>
+            </div>
             <div id="forecasts-loading" class="loading" style="display: none;">Running forecasts... This may take a few minutes.</div>
             <div id="forecasts-content"></div>
         </div>

@@ -729,6 +729,97 @@ def forecast_visualization():
     return jsonify({'image': img_base64, 'metrics': metrics_dict})
 
 
+@app.route('/api/forecast/non_shiftable')
+def forecast_non_shiftable():
+    """Generate non-shiftable load forecast using seasonal naive method."""
+    device_data = load_device_data()
+    non_shiftable_load = device_data['non_shiftable_load']
+    
+    if len(non_shiftable_load) == 0:
+        return jsonify({
+            'available': False,
+            'error': 'No non-shiftable load data available'
+        }), 404
+    
+    try:
+        # Use last 2 weeks of data for forecast (need at least 168 hours)
+        if len(non_shiftable_load) < 168:
+            return jsonify({
+                'available': False,
+                'error': f'Insufficient data: need at least 168 hours, got {len(non_shiftable_load)}'
+            }), 400
+        
+        # Get recent history for visualization
+        recent_history = non_shiftable_load.tail(336)  # Last 2 weeks
+        
+        # Generate 24-hour forecast
+        forecast = forecast_non_shiftable_load_seasonal_naive(
+            load_history=non_shiftable_load,
+            horizon_hours=24,
+            season_hours=168,  # Weekly pattern
+        )
+        
+        # Create visualization
+        fig, axes = plt.subplots(2, 1, figsize=(16, 10))
+        
+        # 1. Historical data and forecast
+        ax1 = axes[0]
+        # Show last week of history
+        history_week = recent_history.tail(168)
+        ax1.plot(history_week.index, history_week.values, 
+                linewidth=2, color='steelblue', label='Historical Load (Last Week)', alpha=0.7)
+        ax1.plot(forecast.index, forecast.values, 
+                marker='o', linewidth=2, markersize=6, color='coral', 
+                label='24-Hour Forecast (Seasonal Naive)', linestyle='--')
+        ax1.set_title('Non-Shiftable Load: Historical vs Forecast', fontsize=14, fontweight='bold')
+        ax1.set_xlabel('Time')
+        ax1.set_ylabel('Load (kW)')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        
+        # 2. Forecast details
+        ax2 = axes[1]
+        ax2.plot(forecast.index, forecast.values, marker='o', linewidth=2, 
+                markersize=8, color='coral', label='24-Hour Forecast')
+        ax2.fill_between(forecast.index, forecast.values, alpha=0.3, color='coral')
+        ax2.set_title('24-Hour Non-Shiftable Load Forecast (Seasonal Naive)', fontsize=14, fontweight='bold')
+        ax2.set_xlabel('Time')
+        ax2.set_ylabel('Load (kW)')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        
+        plt.tight_layout()
+        img_base64 = fig_to_base64(fig)
+        
+        # Calculate forecast statistics
+        forecast_stats = {
+            'mean': float(forecast.mean()),
+            'std': float(forecast.std()),
+            'min': float(forecast.min()),
+            'max': float(forecast.max()),
+            'total': float(forecast.sum()),
+        }
+        
+        # Convert forecast to dict with string keys
+        forecast_dict = {str(k): float(v) for k, v in forecast.items()}
+        
+        return jsonify({
+            'available': True,
+            'forecast': forecast_dict,
+            'statistics': forecast_stats,
+            'method': 'Seasonal Naive (Weekly Pattern)',
+            'description': 'Forecast rule: forecast_load[t] = realized_load[t - 168 hours]',
+            'image': img_base64,
+        })
+    except Exception as e:
+        return jsonify({
+            'available': False,
+            'error': str(e),
+        }), 500
+
+
 if __name__ == '__main__':
     print("Starting Energy Management System Dashboard Backend...")
     print("Access the dashboard at: http://localhost:5001")
