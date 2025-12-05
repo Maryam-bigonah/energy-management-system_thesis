@@ -300,7 +300,13 @@
                     loadDatabaseViz();
                     break;
                 case 'forecasts':
-                    loadForecastViz();
+                    // Don't auto-load, let user click button
+                    document.getElementById('forecasts-content').innerHTML = 
+                        '<div style="padding: 20px; text-align: center; color: #666;">' +
+                        '<h3>Ready to Run Forecasts</h3>' +
+                        '<p>Click "⚡ Run PV Forecasts" to see individual model results, or</p>' +
+                        '<p>Click "📈 View Comparison Chart" to see all models compared.</p>' +
+                        '</div>';
                     break;
             }
         }
@@ -561,15 +567,41 @@
         }
 
         async function loadForecastViz() {
+            document.getElementById('forecasts-loading').style.display = 'block';
+            document.getElementById('forecasts-loading').innerHTML = 'Generating comparison chart... This may take several minutes.';
+            document.getElementById('forecasts-content').innerHTML = '';
+            
             try {
-                const response = await fetch(`${API_BASE}/forecast/visualization`);
+                // Add timeout for long-running requests
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes timeout
+                
+                const response = await fetch(`${API_BASE}/forecast/visualization`, {
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+                    throw new Error(errorData.error || response.statusText);
+                }
+                
                 const data = await response.json();
                 
-                let html = '<div class="image-container">';
+                if (!data.image || !data.metrics || Object.keys(data.metrics).length === 0) {
+                    document.getElementById('forecasts-loading').style.display = 'none';
+                    document.getElementById('forecasts-content').innerHTML = 
+                        '<div class="error">No forecast data available. Please run forecasts first by clicking "⚡ Run PV Forecasts".</div>';
+                    return;
+                }
+                
+                let html = '<h2 class="section-title">PV Model Comparison</h2>';
+                html += '<div class="image-container">';
                 html += `<img src="data:image/png;base64,${data.image}" alt="Forecast Visualization">`;
                 html += '</div>';
                 
-                if (data.metrics) {
+                if (data.metrics && Object.keys(data.metrics).length > 0) {
                     html += '<h3 style="margin: 30px 0 15px 0;">Model Performance Metrics</h3>';
                     html += '<table>';
                     html += '<tr><th>Model</th><th>Set</th><th>MAE (kW)</th><th>RMSE (kW)</th><th>nRMSE</th><th>R²</th></tr>';
@@ -595,10 +627,18 @@
                     html += '</table>';
                 }
                 
+                document.getElementById('forecasts-loading').style.display = 'none';
                 document.getElementById('forecasts-content').innerHTML = html;
             } catch (error) {
-                document.getElementById('forecasts-content').innerHTML = 
-                    `<div class="error">Error loading forecast visualization: ${error.message}</div>`;
+                document.getElementById('forecasts-loading').style.display = 'none';
+                if (error.name === 'AbortError') {
+                    document.getElementById('forecasts-content').innerHTML = 
+                        '<div class="error">Request timeout: Forecast training is taking too long. The models may still be training. Please try again in a few minutes, or click "⚡ Run PV Forecasts" to see individual model results.</div>';
+                } else {
+                    document.getElementById('forecasts-content').innerHTML = 
+                        `<div class="error">Error loading forecast visualization: ${error.message}<br><br>
+                        <strong>Note:</strong> This endpoint trains all models which can take 5-15 minutes. Try clicking "⚡ Run PV Forecasts" first to see individual results.</div>`;
+                }
             }
         }
 
