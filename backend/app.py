@@ -131,13 +131,13 @@ def load_device_data():
         
         # Resample to hourly
         if len(non_shiftable_load) > 0:
-            non_shiftable_hourly = non_shiftable_load.resample('1H').mean()
+            non_shiftable_hourly = non_shiftable_load.resample('1h').mean()
         else:
             non_shiftable_hourly = pd.Series(dtype=float)
         
         shiftable_hourly = {}
         for name, profile in shiftable_profiles.items():
-            shiftable_hourly[name] = profile.resample('1H').mean()
+            shiftable_hourly[name] = profile.resample('1h').mean()
         
         device_data = {
             'non_shiftable_load': non_shiftable_hourly,
@@ -270,13 +270,35 @@ def data_overview():
 
 @app.route('/api/data/features')
 def get_features():
-    """Get detailed feature information."""
-    history_df, _ = load_all_data()
+    """Get detailed feature information for all data sources."""
+    history_df, pvgis = load_all_data()
+    device_data = load_device_data()
     
-    features = {}
+    features = {
+        'pvgis': {},
+        'merged': {},
+        'non_shiftable_load': {},
+        'shiftable_load': {},
+    }
+    
+    # PVGIS features
+    for col in pvgis.columns:
+        if pd.api.types.is_numeric_dtype(pvgis[col]):
+            features['pvgis'][col] = {
+                'dtype': str(pvgis[col].dtype),
+                'mean': float(pvgis[col].mean()),
+                'std': float(pvgis[col].std()),
+                'min': float(pvgis[col].min()),
+                'max': float(pvgis[col].max()),
+                'median': float(pvgis[col].median()),
+                'missing': int(pvgis[col].isna().sum()),
+                'missing_pct': float(pvgis[col].isna().sum() / len(pvgis) * 100),
+            }
+    
+    # Merged dataset features
     for col in history_df.columns:
         if pd.api.types.is_numeric_dtype(history_df[col]):
-            features[col] = {
+            features['merged'][col] = {
                 'dtype': str(history_df[col].dtype),
                 'mean': float(history_df[col].mean()),
                 'std': float(history_df[col].std()),
@@ -285,6 +307,38 @@ def get_features():
                 'median': float(history_df[col].median()),
                 'missing': int(history_df[col].isna().sum()),
                 'missing_pct': float(history_df[col].isna().sum() / len(history_df) * 100),
+            }
+    
+    # Non-shiftable load features
+    non_shiftable_load = device_data['non_shiftable_load']
+    if len(non_shiftable_load) > 0:
+        features['non_shiftable_load']['non_shiftable_load_kw'] = {
+            'dtype': str(non_shiftable_load.dtype),
+            'mean': float(non_shiftable_load.mean()),
+            'std': float(non_shiftable_load.std()),
+            'min': float(non_shiftable_load.min()),
+            'max': float(non_shiftable_load.max()),
+            'median': float(non_shiftable_load.median()),
+            'missing': int(non_shiftable_load.isna().sum()),
+            'missing_pct': float(non_shiftable_load.isna().sum() / len(non_shiftable_load) * 100),
+            'description': 'Aggregated load from all non-shiftable devices',
+            'device_count': len(device_data['non_shiftable_devices']),
+        }
+    
+    # Shiftable load features (individual devices)
+    shiftable_profiles = device_data['shiftable_profiles']
+    for device_name, profile in shiftable_profiles.items():
+        if len(profile) > 0:
+            features['shiftable_load'][device_name] = {
+                'dtype': str(profile.dtype),
+                'mean': float(profile.mean()),
+                'std': float(profile.std()),
+                'min': float(profile.min()),
+                'max': float(profile.max()),
+                'median': float(profile.median()),
+                'missing': int(profile.isna().sum()),
+                'missing_pct': float(profile.isna().sum() / len(profile) * 100),
+                'description': 'Shiftable device power profile',
             }
     
     return jsonify(features)

@@ -406,23 +406,90 @@
                 const response = await fetch(`${API_BASE}/data/features`);
                 const features = await response.json();
                 
-                let html = '<div class="feature-grid">';
+                let html = '';
                 
-                for (const [name, stats] of Object.entries(features)) {
-                    html += `
-                        <div class="feature-card">
-                            <h4>${name}</h4>
-                            <div class="detail"><strong>Mean:</strong> ${stats.mean.toFixed(4)}</div>
-                            <div class="detail"><strong>Std:</strong> ${stats.std.toFixed(4)}</div>
-                            <div class="detail"><strong>Min:</strong> ${stats.min.toFixed(4)}</div>
-                            <div class="detail"><strong>Max:</strong> ${stats.max.toFixed(4)}</div>
-                            <div class="detail"><strong>Median:</strong> ${stats.median.toFixed(4)}</div>
-                            <div class="detail"><strong>Missing:</strong> ${stats.missing} (${stats.missing_pct.toFixed(2)}%)</div>
-                        </div>
-                    `;
+                // PVGIS Features
+                if (features.pvgis && Object.keys(features.pvgis).length > 0) {
+                    html += '<h3 style="margin: 30px 0 15px 0; color: #667eea;">PVGIS SARAH3 Features</h3>';
+                    html += '<div class="feature-grid">';
+                    for (const [name, stats] of Object.entries(features.pvgis)) {
+                        html += `
+                            <div class="feature-card">
+                                <h4>${name}</h4>
+                                <div class="detail"><strong>Mean:</strong> ${stats.mean.toFixed(4)}</div>
+                                <div class="detail"><strong>Std:</strong> ${stats.std.toFixed(4)}</div>
+                                <div class="detail"><strong>Min:</strong> ${stats.min.toFixed(4)}</div>
+                                <div class="detail"><strong>Max:</strong> ${stats.max.toFixed(4)}</div>
+                                <div class="detail"><strong>Median:</strong> ${stats.median.toFixed(4)}</div>
+                                <div class="detail"><strong>Missing:</strong> ${stats.missing} (${stats.missing_pct.toFixed(2)}%)</div>
+                            </div>
+                        `;
+                    }
+                    html += '</div>';
                 }
                 
-                html += '</div>';
+                // Merged Dataset Features
+                if (features.merged && Object.keys(features.merged).length > 0) {
+                    html += '<h3 style="margin: 30px 0 15px 0; color: #667eea;">Merged Dataset Features (PVGIS)</h3>';
+                    html += '<div class="feature-grid">';
+                    for (const [name, stats] of Object.entries(features.merged)) {
+                        html += `
+                            <div class="feature-card">
+                                <h4>${name}</h4>
+                                <div class="detail"><strong>Mean:</strong> ${stats.mean.toFixed(4)}</div>
+                                <div class="detail"><strong>Std:</strong> ${stats.std.toFixed(4)}</div>
+                                <div class="detail"><strong>Min:</strong> ${stats.min.toFixed(4)}</div>
+                                <div class="detail"><strong>Max:</strong> ${stats.max.toFixed(4)}</div>
+                                <div class="detail"><strong>Median:</strong> ${stats.median.toFixed(4)}</div>
+                                <div class="detail"><strong>Missing:</strong> ${stats.missing} (${stats.missing_pct.toFixed(2)}%)</div>
+                            </div>
+                        `;
+                    }
+                    html += '</div>';
+                }
+                
+                // Non-Shiftable Load Features
+                if (features.non_shiftable_load && Object.keys(features.non_shiftable_load).length > 0) {
+                    html += '<h3 style="margin: 30px 0 15px 0; color: #667eea;">Non-Shiftable Load Features</h3>';
+                    html += '<div class="feature-grid">';
+                    for (const [name, stats] of Object.entries(features.non_shiftable_load)) {
+                        html += `
+                            <div class="feature-card">
+                                <h4>${name}</h4>
+                                ${stats.description ? `<div class="detail" style="color: #888; font-style: italic;">${stats.description}</div>` : ''}
+                                ${stats.device_count ? `<div class="detail"><strong>Device Count:</strong> ${stats.device_count}</div>` : ''}
+                                <div class="detail"><strong>Mean:</strong> ${stats.mean.toFixed(4)} kW</div>
+                                <div class="detail"><strong>Std:</strong> ${stats.std.toFixed(4)} kW</div>
+                                <div class="detail"><strong>Min:</strong> ${stats.min.toFixed(4)} kW</div>
+                                <div class="detail"><strong>Max:</strong> ${stats.max.toFixed(4)} kW</div>
+                                <div class="detail"><strong>Median:</strong> ${stats.median.toFixed(4)} kW</div>
+                                <div class="detail"><strong>Missing:</strong> ${stats.missing} (${stats.missing_pct.toFixed(2)}%)</div>
+                            </div>
+                        `;
+                    }
+                    html += '</div>';
+                }
+                
+                // Shiftable Load Features
+                if (features.shiftable_load && Object.keys(features.shiftable_load).length > 0) {
+                    html += '<h3 style="margin: 30px 0 15px 0; color: #667eea;">Shiftable Load Features</h3>';
+                    html += '<div class="feature-grid">';
+                    for (const [name, stats] of Object.entries(features.shiftable_load)) {
+                        html += `
+                            <div class="feature-card">
+                                <h4>${name}</h4>
+                                ${stats.description ? `<div class="detail" style="color: #888; font-style: italic;">${stats.description}</div>` : ''}
+                                <div class="detail"><strong>Mean:</strong> ${stats.mean.toFixed(4)} kW</div>
+                                <div class="detail"><strong>Std:</strong> ${stats.std.toFixed(4)} kW</div>
+                                <div class="detail"><strong>Min:</strong> ${stats.min.toFixed(4)} kW</div>
+                                <div class="detail"><strong>Max:</strong> ${stats.max.toFixed(4)} kW</div>
+                                <div class="detail"><strong>Median:</strong> ${stats.median.toFixed(4)} kW</div>
+                                <div class="detail"><strong>Missing:</strong> ${stats.missing} (${stats.missing_pct.toFixed(2)}%)</div>
+                            </div>
+                        `;
+                    }
+                    html += '</div>';
+                }
                 
                 document.getElementById('features-loading').style.display = 'none';
                 document.getElementById('features-content').innerHTML = html;
