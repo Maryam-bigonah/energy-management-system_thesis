@@ -25,22 +25,30 @@ from forecasting.data_loading import (
     load_pvgis_weather_hourly,
     merge_pv_weather_sources,
 )
-from forecasting.pv_forecaster import forecast_pv_timeseries as forecast_gb
+from forecasting.pv_forecaster import (
+    forecast_pv_timeseries as forecast_gb,
+    forecast_non_shiftable_load_seasonal_naive,
+    classify_devices,
+    ShiftableDevice,
+    compute_shiftable_load_profiles,
+)
 
-# Try importing other forecasters
+# Try importing other forecasters (handle gracefully if dependencies missing)
 try:
     from forecasting.pv_forecaster_xgboost import forecast_pv_timeseries as forecast_xgb
     XGBOOST_AVAILABLE = True
-except ImportError:
+except (ImportError, Exception) as e:
     XGBOOST_AVAILABLE = False
     forecast_xgb = None
+    print(f"Note: XGBoost not available: {e}")
 
 try:
     from forecasting.pv_forecaster_lstm import forecast_pv_timeseries as forecast_lstm
     LSTM_AVAILABLE = True
-except ImportError:
+except (ImportError, Exception) as e:
     LSTM_AVAILABLE = False
     forecast_lstm = None
+    print(f"Note: LSTM/TensorFlow not available: {e}")
 
 # Get project root directory
 project_root = Path(__file__).parent.parent
@@ -55,6 +63,8 @@ CORS(app)
 # Data paths
 DATA_DIR = Path("/Users/mariabigonah/Desktop/thesis/building database")
 PVGIS_PATH = DATA_DIR / "Timeseries_45.044_7.639_SA3_40deg_2deg_2005_2023.csv"
+DEVICE_PROFILES_PATH = Path("/Users/mariabigonah/Desktop/thesis/CHR54 Retired Couple, no work/Results/DeviceProfiles.HH1.Electricity.csv")
+DEVICE_DURATION_PATH = Path("/Users/mariabigonah/Desktop/thesis/CHR54 Retired Couple, no work/Reports/DeviceDurationCurves.Electricity.csv")
 
 # Cache for loaded data
 _data_cache = {}
@@ -65,6 +75,90 @@ def estimate_pv_from_irradiance(irr_direct, irr_diffuse, temp_amb, capacity_kw=1
     g_eff = irr_direct + irr_diffuse
     pv_power = (g_eff / 1000.0) * capacity_kw * efficiency * (1 - 0.004 * (temp_amb - 25.0))
     return pv_power.clip(lower=0)
+
+
+def load_device_data():
+    """Load and process device load profiles."""
+    if 'device_data' in _data_cache:
+        return _data_cache['device_data']
+    
+    print("Loading device data...")
+    
+    # Load device profiles (15-minute resolution)
+    try:
+        device_profiles_df = pd.read_csv(DEVICE_PROFILES_PATH, sep=';', low_memory=False)
+        
+        # Parse time column
+        if 'Time' in device_profiles_df.columns:
+            device_profiles_df['Time'] = pd.to_datetime(device_profiles_df['Time'], errors='coerce')
+            device_profiles_df = device_profiles_df.dropna(subset=['Time'])
+            device_profiles_df = device_profiles_df.set_index('Time')
+        
+        # Remove metadata columns
+        device_cols = [col for col in device_profiles_df.columns 
+                      if col not in ['Electricity.Timestep', 'Time'] 
+                      and not col.startswith('Unnamed')]
+        
+        # Get device names (remove [kWh] suffix)
+        device_names = [col.replace(' [kWh]', '') for col in device_cols]
+        
+        # Classify devices
+        device_classification = classify_devices(device_names)
+        
+        # Separate shiftable and non-shiftable
+        shiftable_devices = device_classification[device_classification['category'] == 'shiftable']['device_name'].tolist()
+        non_shiftable_devices = device_classification[device_classification['category'] == 'non_shiftable']['device_name'].tolist()
+        
+        # Map back to original column names
+        shiftable_cols = [col for col, name in zip(device_cols, device_names) if name in shiftable_devices]
+        non_shiftable_cols = [col for col, name in zip(device_cols, device_names) if name in non_shiftable_devices]
+        
+        # Aggregate non-shiftable load (sum all non-shiftable devices)
+        if non_shiftable_cols:
+            non_shiftable_load = device_profiles_df[non_shiftable_cols].sum(axis=1)
+            # Convert from kWh to kW (assuming 15-minute intervals)
+            non_shiftable_load = non_shiftable_load * 4  # Convert kWh/15min to kW
+        else:
+            non_shiftable_load = pd.Series(dtype=float)
+        
+        # Get shiftable device profiles
+        shiftable_profiles = {}
+        for col, name in zip(shiftable_cols, shiftable_devices):
+            if col in device_profiles_df.columns:
+                profile = device_profiles_df[col].copy()
+                profile = profile * 4  # Convert kWh/15min to kW
+                shiftable_profiles[name] = profile
+        
+        # Resample to hourly
+        if len(non_shiftable_load) > 0:
+            non_shiftable_hourly = non_shiftable_load.resample('1H').mean()
+        else:
+            non_shiftable_hourly = pd.Series(dtype=float)
+        
+        shiftable_hourly = {}
+        for name, profile in shiftable_profiles.items():
+            shiftable_hourly[name] = profile.resample('1H').mean()
+        
+        device_data = {
+            'non_shiftable_load': non_shiftable_hourly,
+            'shiftable_profiles': shiftable_hourly,
+            'classification': device_classification,
+            'shiftable_devices': shiftable_devices,
+            'non_shiftable_devices': non_shiftable_devices,
+        }
+        
+    except Exception as e:
+        print(f"Error loading device data: {e}")
+        device_data = {
+            'non_shiftable_load': pd.Series(dtype=float),
+            'shiftable_profiles': {},
+            'classification': pd.DataFrame(),
+            'shiftable_devices': [],
+            'non_shiftable_devices': [],
+        }
+    
+    _data_cache['device_data'] = device_data
+    return device_data
 
 
 def load_all_data():
@@ -116,8 +210,13 @@ def index():
 
 @app.route('/api/data/overview')
 def data_overview():
-    """Get overview statistics for all databases (PVGIS only)."""
+    """Get overview statistics for all databases (PVGIS and device loads)."""
     history_df, pvgis = load_all_data()
+    device_data = load_device_data()
+    
+    # Prepare device load statistics
+    non_shiftable_load = device_data['non_shiftable_load']
+    shiftable_profiles = device_data['shiftable_profiles']
     
     overview = {
         'pvgis': {
@@ -139,6 +238,30 @@ def data_overview():
                 'end': history_df.index.max().isoformat(),
             },
             'statistics': history_df.describe().to_dict(),
+        },
+        'non_shiftable_load': {
+            'name': 'Non-Shiftable Load Profile',
+            'rows': len(non_shiftable_load),
+            'columns': ['non_shiftable_load_kw'],
+            'date_range': {
+                'start': non_shiftable_load.index.min().isoformat() if len(non_shiftable_load) > 0 else None,
+                'end': non_shiftable_load.index.max().isoformat() if len(non_shiftable_load) > 0 else None,
+            },
+            'statistics': non_shiftable_load.describe().to_dict() if len(non_shiftable_load) > 0 else {},
+            'device_count': len(device_data['non_shiftable_devices']),
+            'devices': device_data['non_shiftable_devices'][:10],  # First 10 devices
+        },
+        'shiftable_load': {
+            'name': 'Shiftable Load Profiles',
+            'rows': len(list(shiftable_profiles.values())[0]) if shiftable_profiles else 0,
+            'columns': list(shiftable_profiles.keys()),
+            'date_range': {
+                'start': list(shiftable_profiles.values())[0].index.min().isoformat() if shiftable_profiles else None,
+                'end': list(shiftable_profiles.values())[0].index.max().isoformat() if shiftable_profiles else None,
+            },
+            'statistics': {name: profile.describe().to_dict() for name, profile in list(shiftable_profiles.items())[:5]} if shiftable_profiles else {},
+            'device_count': len(device_data['shiftable_devices']),
+            'devices': device_data['shiftable_devices'],
         },
     }
     
@@ -451,6 +574,6 @@ def forecast_visualization():
 
 if __name__ == '__main__':
     print("Starting Energy Management System Dashboard Backend...")
-    print("Access the dashboard at: http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("Access the dashboard at: http://localhost:5001")
+    app.run(debug=True, host='0.0.0.0', port=5001)
 

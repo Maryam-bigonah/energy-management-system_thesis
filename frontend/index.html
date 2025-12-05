@@ -262,7 +262,7 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:5000/api';
+        const API_BASE = 'http://localhost:5001/api';
 
         function showTab(tabName) {
             // Hide all tabs
@@ -305,13 +305,26 @@
                 let html = '<div class="stats-grid">';
                 
                 for (const [key, db] of Object.entries(data)) {
+                    let extraInfo = '';
+                    if (key === 'non_shiftable_load' && db.device_count !== undefined) {
+                        extraInfo = `<div style="margin-top: 5px; font-size: 0.85em; opacity: 0.9;">
+                            ${db.device_count} devices
+                        </div>`;
+                    } else if (key === 'shiftable_load' && db.device_count !== undefined) {
+                        extraInfo = `<div style="margin-top: 5px; font-size: 0.85em; opacity: 0.9;">
+                            ${db.device_count} devices
+                        </div>`;
+                    } else {
+                        extraInfo = `<div style="margin-top: 10px; font-size: 0.9em;">
+                            ${db.columns.length} columns
+                        </div>`;
+                    }
+                    
                     html += `
                         <div class="stat-card">
                             <h3>${db.name}</h3>
                             <div class="value">${db.rows.toLocaleString()}</div>
-                            <div style="margin-top: 10px; font-size: 0.9em;">
-                                ${db.columns.length} columns
-                            </div>
+                            ${extraInfo}
                         </div>
                     `;
                 }
@@ -321,6 +334,31 @@
                 html += '<h3 style="margin: 30px 0 15px 0;">Database Details</h3>';
                 
                 for (const [key, db] of Object.entries(data)) {
+                    let deviceInfo = '';
+                    if (key === 'non_shiftable_load' && db.devices && db.devices.length > 0) {
+                        deviceInfo = `
+                            <tr>
+                                <td>Device Count</td>
+                                <td>${db.device_count || 0}</td>
+                            </tr>
+                            <tr>
+                                <td>Sample Devices</td>
+                                <td>${db.devices.slice(0, 5).join(', ')}${db.devices.length > 5 ? '...' : ''}</td>
+                            </tr>
+                        `;
+                    } else if (key === 'shiftable_load' && db.devices && db.devices.length > 0) {
+                        deviceInfo = `
+                            <tr>
+                                <td>Device Count</td>
+                                <td>${db.device_count || 0}</td>
+                            </tr>
+                            <tr>
+                                <td>Shiftable Devices</td>
+                                <td>${db.devices.join(', ')}</td>
+                            </tr>
+                        `;
+                    }
+                    
                     html += `
                         <div style="margin-bottom: 30px;">
                             <h4 style="color: #667eea; margin-bottom: 10px;">${db.name}</h4>
@@ -345,9 +383,10 @@
                                     <td>Date Range (End)</td>
                                     <td>${db.date_range.end || 'N/A'}</td>
                                 </tr>
+                                ${deviceInfo}
                                 <tr>
                                     <td>Columns</td>
-                                    <td>${db.columns.join(', ')}</td>
+                                    <td>${db.columns.length > 10 ? db.columns.slice(0, 10).join(', ') + '...' : db.columns.join(', ')}</td>
                                 </tr>
                             </table>
                         </div>
