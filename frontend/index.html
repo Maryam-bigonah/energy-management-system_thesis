@@ -604,7 +604,21 @@
 
         async function loadIndividualForecast(modelName) {
             try {
-                const response = await fetch(`${API_BASE}/forecast/individual/${modelName}`);
+                // Add timeout for long-running requests
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout
+                
+                const response = await fetch(`${API_BASE}/forecast/individual/${modelName}`, {
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+                    return `<div class="error">Error loading ${modelName}: ${errorData.error || response.statusText}</div>`;
+                }
+                
                 const data = await response.json();
                 
                 if (!data.available) {
@@ -652,12 +666,16 @@
                 
                 return html;
             } catch (error) {
+                if (error.name === 'AbortError') {
+                    return `<div class="error">Request timeout: ${modelName} forecast is taking too long. The model may still be training. Please try again in a few minutes.</div>`;
+                }
                 return `<div class="error">Error loading ${modelName}: ${error.message}</div>`;
             }
         }
 
         async function runForecasts() {
             document.getElementById('forecasts-loading').style.display = 'block';
+            document.getElementById('forecasts-loading').innerHTML = 'Running forecasts... This may take several minutes. Please wait...';
             document.getElementById('forecasts-content').innerHTML = '';
             
             try {
@@ -665,11 +683,13 @@
                 let html = '<h2 class="section-title">PV Forecasting Results</h2>';
                 html += '<p style="margin-bottom: 20px;">Detailed results for each forecasting model:</p>';
                 
-                // GradientBoosting
+                // Show loading message for GradientBoosting
+                document.getElementById('forecasts-loading').innerHTML = 'Training GradientBoosting model... This may take 2-5 minutes.';
                 html += await loadIndividualForecast('gradientboosting');
                 
                 // XGBoost
                 try {
+                    document.getElementById('forecasts-loading').innerHTML = 'Training XGBoost model... (if available)';
                     html += await loadIndividualForecast('xgboost');
                 } catch (e) {
                     html += `<div style="margin: 20px 0; padding: 15px; background: #fff3cd; border-radius: 8px;">
@@ -680,6 +700,7 @@
                 
                 // LSTM
                 try {
+                    document.getElementById('forecasts-loading').innerHTML = 'Training LSTM model... This may take 5-10 minutes.';
                     html += await loadIndividualForecast('lstm');
                 } catch (e) {
                     html += `<div style="margin: 20px 0; padding: 15px; background: #fff3cd; border-radius: 8px;">
@@ -699,7 +720,8 @@
             } catch (error) {
                 document.getElementById('forecasts-loading').style.display = 'none';
                 document.getElementById('forecasts-content').innerHTML = 
-                    `<div class="error">Error running forecasts: ${error.message}</div>`;
+                    `<div class="error">Error running forecasts: ${error.message}<br><br>
+                    <strong>Note:</strong> Forecast training can take several minutes. If this error persists, the server may be processing the request. Try refreshing the page or check the server logs.</div>`;
             }
         }
 
