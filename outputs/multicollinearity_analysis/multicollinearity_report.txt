@@ -1,0 +1,93 @@
+======================================================================
+MULTICOLLINEARITY AND ILL-CONDITIONING ANALYSIS REPORT
+======================================================================
+
+Dataset: /Users/mariabigonah/Desktop/thesis/code/outputs/MASTER_20_APARTMENTS_2022_2023.csv
+Features analyzed: 12
+Total rows: 17296
+Date range: 2022-01-01 00:00:00 to 2023-12-27 07:00:00
+
+======================================================================
+1. CONDITION NUMBER (ILL-CONDITIONING CHECK)
+======================================================================
+Condition number of X^T X: 7.04e+03
+  ✓ Matrix is well-conditioned
+    Suitable for optimization and regression
+
+======================================================================
+2. HIGH CORRELATIONS (|ρ| > 0.7)
+======================================================================
+  temp            <-> T2m            :   0.978
+  PV_true         <-> Gb             :   0.969
+  PV_true         <-> Gd             :   0.770
+  PV_true         <-> Gr             :   0.934
+  PV_true         <-> H_sun          :   0.810
+  Gb              <-> Gr             :   0.882
+  Gd              <-> Gr             :   0.829
+  Gd              <-> H_sun          :   0.904
+  Gr              <-> H_sun          :   0.914
+
+  Found 9 high correlation pairs
+
+======================================================================
+3. VARIANCE INFLATION FACTOR (VIF)
+======================================================================
+VIF > 10 = high multicollinearity, VIF > 5 = moderate
+
+VIF values:
+  PV_true        : VIF = 1041.08 ⚠ CRITICAL
+  Gb             : VIF =  707.98 ⚠ CRITICAL
+  Gd             : VIF =  162.47 ⚠ CRITICAL
+  T2m            : VIF =  118.96 ⚠ CRITICAL
+  temp           : VIF =  107.96 ⚠ CRITICAL
+  Gr             : VIF =   43.64 ⚠ CRITICAL
+  H_sun          : VIF =   20.53 ⚠ CRITICAL
+  humidity       : VIF =    7.69 ⚠ WARNING
+  WS10m          : VIF =    5.76 ⚠ WARNING
+  wind_speed     : VIF =    4.64 ✓ OK
+  clouds         : VIF =    3.36 ✓ OK
+  total_load     : VIF =    2.59 ✓ OK
+
+⚠ 7 features with VIF > 10 (high multicollinearity)
+
+======================================================================
+4. SPECIFIC ISSUES IDENTIFIED
+======================================================================
+T2m (PVGIS) vs temp (OpenWeather): ρ = 0.978
+  ⚠ CRITICAL: T2m and temp are nearly identical (redundant features)
+    Recommendation: Use only ONE in forecasting models
+
+WS10m (PVGIS) vs wind_speed (OpenWeather): ρ = 0.477
+
+Gb vs PV_true: ρ = 0.969
+  ✓ Expected: Gb is the primary driver of PV (this is correct)
+    High correlation is expected and desired for PV forecasting
+
+======================================================================
+5. RECOMMENDATIONS FOR THESIS
+======================================================================
+
+⚠ MULTICOLLINEARITY ISSUES DETECTED:
+
+1. FEATURE SELECTION:
+   - Remove redundant features:
+     * Use either T2m (PVGIS) OR temp (OpenWeather), not both
+   - For PV forecasting: Use Gb as primary feature (VIF issue due to
+     correlation with PV_true is expected - Gb is the target driver)
+
+2. MODELING STRATEGIES:
+   - Use regularization (Ridge/Lasso) in regression models
+   - Apply feature selection (e.g., recursive feature elimination)
+   - Consider dimensionality reduction (PCA) if needed
+
+3. THESIS DOCUMENTATION:
+   - Document these checks in 'Data Quality and Preprocessing' section
+   - Explain that high correlations between PV features and PV_true
+     are EXPECTED (these are the drivers, not problems)
+   - Note that redundant features (T2m vs temp) were identified and
+     only one was used in final models
+   - Include correlation matrix figure in appendix
+
+======================================================================
+END OF REPORT
+======================================================================
