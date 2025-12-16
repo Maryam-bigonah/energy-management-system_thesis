@@ -202,10 +202,19 @@ def fig_to_base64(fig):
     return img_base64
 
 
+# Thesis figures path
+FIGURES_DIR = project_root / "outputs" / "figures"
+
 @app.route('/')
 def index():
     """Serve the main dashboard page."""
     return send_from_directory(str(frontend_path), 'index.html')
+
+
+@app.route('/thesis-figures')
+def thesis_figures():
+    """Serve the thesis figures dashboard page."""
+    return send_from_directory(str(frontend_path), 'thesis_figures.html')
 
 
 @app.route('/api/data/overview')
@@ -852,6 +861,64 @@ def forecast_non_shiftable():
             'available': False,
             'error': str(e),
         }), 500
+
+
+@app.route('/api/thesis/figures')
+def list_thesis_figures():
+    """List all available thesis figures."""
+    figures_dir = project_root / "outputs" / "figures"
+    
+    if not figures_dir.exists():
+        return jsonify({
+            'available': False,
+            'error': 'Figures directory not found'
+        }), 404
+    
+    figures = []
+    figure_names = {
+        'figure1_system_diagram.png': 'System-level Relationship Diagram',
+        'figure2_timeseries_alignment.png': 'Time-Series Alignment (Load, PV, Net Load)',
+        'figure3_pv_relationships.png': 'PV Feature Relationships',
+        'figure4_load_by_family_type.png': 'Load Behavior by Family Type',
+        'figure5_battery_operation_logic.png': 'Battery Operation Logic'
+    }
+    
+    for filename, title in figure_names.items():
+        fig_path = figures_dir / filename
+        if fig_path.exists():
+            figures.append({
+                'filename': filename,
+                'title': title,
+                'url': f'/api/thesis/figures/{filename}',
+                'size': fig_path.stat().st_size
+            })
+    
+    return jsonify({
+        'available': True,
+        'count': len(figures),
+        'figures': figures
+    })
+
+
+@app.route('/api/thesis/figures/<filename>')
+def get_thesis_figure(filename):
+    """Serve a thesis figure image."""
+    figures_dir = project_root / "outputs" / "figures"
+    fig_path = figures_dir / filename
+    
+    if not fig_path.exists() or not fig_path.is_file():
+        return jsonify({'error': 'Figure not found'}), 404
+    
+    # Read image and convert to base64
+    with open(fig_path, 'rb') as f:
+        img_data = f.read()
+        img_base64 = base64.b64encode(img_data).decode('utf-8')
+    
+    return jsonify({
+        'filename': filename,
+        'image': img_base64,
+        'format': 'png'
+    })
 
 
 if __name__ == '__main__':

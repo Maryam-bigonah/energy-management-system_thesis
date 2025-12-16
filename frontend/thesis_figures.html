@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thesis Figures Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 30px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .figures-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+        
+        .figure-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .figure-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+        }
+        
+        .figure-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .figure-image {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        
+        .figure-image:hover {
+            transform: scale(1.02);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 1.2em;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+            cursor: pointer;
+        }
+        
+        .modal-content {
+            margin: auto;
+            display: block;
+            width: 90%;
+            max-width: 1200px;
+            margin-top: 50px;
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 35px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .modal-close:hover {
+            color: #fff;
+        }
+        
+        @media (max-width: 768px) {
+            .figures-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Thesis Figures Dashboard</h1>
+        <p class="subtitle">Dataset Visualization and System Understanding</p>
+        
+        <div id="loading" class="loading">Loading figures...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="figures-container" class="figures-grid"></div>
+    </div>
+    
+    <!-- Modal for full-size image -->
+    <div id="modal" class="modal">
+        <span class="modal-close">&times;</span>
+        <img class="modal-content" id="modal-image">
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:5001/api/thesis';
+        
+        async function loadFigures() {
+            try {
+                const response = await fetch(`${API_BASE}/figures`);
+                const data = await response.json();
+                
+                if (!data.available) {
+                    showError(data.error || 'Figures not available');
+                    return;
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+                const container = document.getElementById('figures-container');
+                
+                for (const figure of data.figures) {
+                    const card = createFigureCard(figure);
+                    container.appendChild(card);
+                }
+            } catch (error) {
+                showError(`Error loading figures: ${error.message}`);
+            }
+        }
+        
+        function createFigureCard(figure) {
+            const card = document.createElement('div');
+            card.className = 'figure-card';
+            
+            const title = document.createElement('div');
+            title.className = 'figure-title';
+            title.textContent = figure.title;
+            
+            const img = document.createElement('img');
+            img.className = 'figure-image';
+            img.alt = figure.title;
+            img.loading = 'lazy';
+            
+            // Load image
+            fetch(`${API_BASE}/figures/${figure.filename}`)
+                .then(res => res.json())
+                .then(data => {
+                    img.src = `data:image/png;base64,${data.image}`;
+                })
+                .catch(err => {
+                    img.src = '';
+                    img.alt = 'Error loading image';
+                });
+            
+            // Click to open modal
+            img.addEventListener('click', () => openModal(img.src));
+            
+            card.appendChild(title);
+            card.appendChild(img);
+            
+            return card;
+        }
+        
+        function openModal(imageSrc) {
+            const modal = document.getElementById('modal');
+            const modalImg = document.getElementById('modal-image');
+            modalImg.src = imageSrc;
+            modal.style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+        
+        // Close modal on click
+        document.getElementById('modal').addEventListener('click', closeModal);
+        document.querySelector('.modal-close').addEventListener('click', closeModal);
+        
+        // Close modal on ESC key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+        
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+        
+        // Load figures on page load
+        loadFigures();
+    </script>
+</body>
+</html>
+
