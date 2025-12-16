@@ -52,11 +52,18 @@ PATH_LPG_FAMILY_ONE_CHILD = Path(
     "SumProfiles.1 child both at work.Electricity.csv"
 )
 
-PATH_LPG_FAMILY_TWO_CHILDREN_APPARENT = Path(
-    "/Users/mariabigonah/Desktop/thesis/CHR54 Retired Couple, no work/"
-    "CHR44 Family with 2 children/"
-    "SumProfiles_Family with 2 childrens.HH1.Apparent.csv"
+PATH_LPG_FAMILY_THREE_CHILDREN_ONE_HOME = Path(
+    "/Users/mariabigonah/Desktop/thesis/building database/"
+    "SumProfiles_3 children 1 at home,1 at work.HH1.Electricity.csv"
 )
+
+# NOTE:
+# This profile represents a family with 3 children where one adult works
+# and one adult stays at home, resulting in higher daytime electricity demand
+# compared to dual-income households. This profile replaces the previous
+# CHR44 "2 children" Apparent power profile to improve data quality and
+# represent a more diverse household composition.
+PATH_LPG_FAMILY_TWO_CHILDREN_DEFAULT = PATH_LPG_FAMILY_THREE_CHILDREN_ONE_HOME
 
 # Default output location for the final master dataset
 PATH_OUTPUT_MASTER = Path(
@@ -198,9 +205,17 @@ def extend_profile_years(
     return out_df
 
 
-def build_household_profiles() -> Dict[str, pd.DataFrame]:
+def build_household_profiles(
+    path_family_two_children: Path = PATH_LPG_FAMILY_TWO_CHILDREN_DEFAULT,
+) -> Dict[str, pd.DataFrame]:
     """
     Build the four household-type profiles as hourly load_kWh for 2022–2024.
+
+    Household types:
+        1. Retired couple (no work)
+        2. Working couple (both at work)
+        3. Family with 1 child (both adults at work)
+        4. Family with 3 children (1 adult at work, 1 at home) – higher daytime demand
 
     Returns
     -------
@@ -209,7 +224,7 @@ def build_household_profiles() -> Dict[str, pd.DataFrame]:
             'retired'
             'working'
             'family_one_child'
-            'family_two_children'
+            'family_two_children'  (note: now represents 3-children family)
         Each value is a DataFrame with columns ['time', 'load_kWh'].
     """
     # 1) Retired couple – already hourly SumProfiles_3600s
@@ -221,10 +236,10 @@ def build_household_profiles() -> Dict[str, pd.DataFrame]:
     # 3) Family, 1 child both at work – minute resolution, aggregate to hourly
     family_one_child_2016 = _parse_lpg_minute_to_hourly(PATH_LPG_FAMILY_ONE_CHILD)
 
-    # 4) Family with 2 children – apparent power profile, but we keep Sum [kWh]
-    family_two_children_2016 = _parse_lpg_hourly(
-        PATH_LPG_FAMILY_TWO_CHILDREN_APPARENT
-    )
+    # 4) Family with 3 children (1 adult at work, 1 at home) – represents households
+    # with daytime occupancy and higher midday electricity consumption.
+    # Variable name kept as 'family_two_children' for backward compatibility.
+    family_two_children_2016 = _parse_lpg_hourly(path_family_two_children)
 
     # Extend each profile from 2016 → 2022–2024
     target_years = (2022, 2023)
@@ -499,6 +514,7 @@ def build_master_dataset(
     output_path: Path = PATH_OUTPUT_MASTER,
     require_complete_features: bool = True,
     also_write_local_copy: bool = True,
+    path_family_two_children: Path = PATH_LPG_FAMILY_TWO_CHILDREN_DEFAULT,
 ) -> pd.DataFrame:
     """
     Build the full master dataset for 20 apartments + PV + weather + calendar.
@@ -517,7 +533,7 @@ def build_master_dataset(
         The final master dataset, also written to `output_path`.
     """
     print("[1/5] Building household profiles and 20-apartment load matrix...")
-    profiles = build_household_profiles()
+    profiles = build_household_profiles(path_family_two_children=path_family_two_children)
     loads = build_20_apartment_load_matrix(profiles)
     loads = loads.set_index("time").sort_index()
 
@@ -589,13 +605,25 @@ if __name__ == "__main__":
         action="store_true",
         help="If set, do not drop rows with missing PV/weather features (keeps full load timeline).",
     )
+    parser.add_argument(
+        "--lpg-family-two-children",
+        type=str,
+        default=str(PATH_LPG_FAMILY_TWO_CHILDREN_DEFAULT),
+        help=(
+            "Absolute path to the LPG SumProfiles file for the 'family_two_children' profile. "
+            "Current default: Family with 3 children (1 adult at work, 1 at home) representing "
+            "higher daytime electricity consumption patterns."
+        ),
+    )
     args = parser.parse_args()
 
     out_path = Path(args.output).expanduser()
+    family_two_children_path = Path(args.lpg_family_two_children).expanduser()
     df_master = build_master_dataset(
         output_path=out_path,
         require_complete_features=not args.keep_missing,
         also_write_local_copy=True,
+        path_family_two_children=family_two_children_path,
     )
     print(f"Master dataset written to: {out_path}")
     print(f"Shape: {df_master.shape[0]} rows x {df_master.shape[1]} columns")

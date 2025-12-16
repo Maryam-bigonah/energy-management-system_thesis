@@ -1,11 +1,12 @@
 """
-Generate thesis-ready optimization figures (O1–O4).
+Generate thesis-ready optimization figures (O1–O5).
 
 Figures:
   O1: Baseline vs Optimized Load (Demand Response) for a representative day
   O2: Battery operation (P_ch, P_dis) + SoC for the same day
   O3: Grid interaction (import/export) for the same day
   O4: Cost comparison (baseline vs optimized) aggregated over a period (default: July 2023)
+  O5: Hierarchical energy supply breakdown (Local -> P2P -> Grid) stacked bars (July 2023)
 
 Outputs:
   outputs/optimization/figures/
@@ -47,7 +48,7 @@ def _load_inputs(base_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
         raise FileNotFoundError(f"Missing {kpis_path}. Run optimization pipeline first.")
 
     results_df = pd.read_csv(results_path, parse_dates=["time"])
-    kpis_df = pd.read_csv(kpis_path, parse_dates=["issue_time"], infer_datetime_format=True)
+    kpis_df = pd.read_csv(kpis_path, parse_dates=["issue_time"])
     return results_df, kpis_df
 
 
@@ -180,6 +181,60 @@ def figure_o4(kpis_df: pd.DataFrame, outdir: Path, period_label: str = "July 202
     return out
 
 
+def figure_o5_supply_breakdown(kpis_df: pd.DataFrame, outdir: Path, period_label: str = "July 2023") -> Path:
+    """
+    Stacked bars showing supply to demand (kWh):
+      Local supply (demand - P2P import - Grid import)
+      + P2P import
+      + Grid import
+
+    Two bars: Baseline vs Optimized.
+    """
+    if "day" in kpis_df.columns:
+        day_str = pd.to_datetime(kpis_df["day"]).dt.strftime("%Y-%m-%d")
+        mask = day_str.str.startswith("2023-07-")
+        sub = kpis_df[mask].copy() if mask.any() else kpis_df.copy()
+    else:
+        sub = kpis_df.copy()
+
+    # Optimized aggregates (kWh)
+    demand_opt = float(sub["total_load_opt_kwh"].sum())
+    grid_in_opt = float(sub["grid_import_total_kwh"].sum())
+    p2p_in_opt = float(sub["p2p_import_total_kwh"].sum())
+    local_opt = max(0.0, demand_opt - grid_in_opt - p2p_in_opt)
+
+    # Baseline aggregates (kWh)
+    demand_base = float(sub["total_load_base_kwh"].sum())
+    # Baseline has no P2P imports by definition
+    # Approximate baseline grid import as demand - PV_used_local (equivalently, from kpis: total_load - pv_used_local)
+    # We stored baseline grid import implicitly via reduction metrics, but not directly.
+    # Here: baseline grid import = demand - (PV used locally in baseline)
+    # PV used locally in baseline = SSR_base * total_load_base
+    pv_used_local_base = float(sub["pv_self_sufficiency_rate_base_pct"].mean() / 100.0 * demand_base) if demand_base > 0 else 0.0
+    grid_in_base = max(0.0, demand_base - pv_used_local_base)
+    p2p_in_base = 0.0
+    local_base = max(0.0, demand_base - grid_in_base - p2p_in_base)
+
+    labels = ["Baseline", "Optimized"]
+    local = [local_base, local_opt]
+    p2p = [p2p_in_base, p2p_in_opt]
+    grid = [grid_in_base, grid_in_opt]
+
+    plt.figure(figsize=(8, 5))
+    plt.bar(labels, local, label="Local (PV + battery)", color="#2ca02c", alpha=0.85)
+    plt.bar(labels, p2p, bottom=local, label="P2P import", color="#ff7f0e", alpha=0.85)
+    plt.bar(labels, grid, bottom=(np.array(local) + np.array(p2p)), label="Grid import", color="#1f77b4", alpha=0.85)
+    plt.ylabel("Energy supplied to demand [kWh]")
+    plt.title(f"Figure O5 — Supply Breakdown (Local → P2P → Grid)\n{period_label}")
+    plt.grid(True, axis="y", alpha=0.25)
+    plt.legend()
+    out = outdir / "figure_O5_supply_breakdown_priority.png"
+    plt.tight_layout()
+    plt.savefig(out, dpi=300)
+    plt.close()
+    return out
+
+
 def main() -> None:
     base_dir = Path("outputs/optimization")
     outdir = base_dir / "figures"
@@ -200,9 +255,10 @@ def main() -> None:
     p2 = figure_o2(results_df, rep_day, outdir, soc_min=None, soc_max=None)
     p3 = figure_o3(results_df, rep_day, outdir)
     p4 = figure_o4(kpis_df, outdir, period_label="July 2023")
+    p5 = figure_o5_supply_breakdown(kpis_df, outdir, period_label="July 2023")
 
     print("[ok] Saved optimization figures:")
-    for p in [p1, p2, p3, p4]:
+    for p in [p1, p2, p3, p4, p5]:
         print(" -", p)
     print("[ok] Representative day:", rep_day)
 

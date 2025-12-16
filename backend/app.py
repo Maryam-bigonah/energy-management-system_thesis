@@ -202,8 +202,11 @@ def fig_to_base64(fig):
     return img_base64
 
 
-# Thesis figures path
-FIGURES_DIR = project_root / "outputs" / "figures"
+# Figures paths
+THESIS_FIGURES_DIR = project_root / "outputs" / "figures"
+OPTIMIZATION_FIGURES_DIR = project_root / "outputs" / "optimization" / "figures"
+FORECASTING_FIGURES_DIR = project_root / "outputs" / "forecasts"
+FORECASTING_RESULTS_FIGURES_DIR = project_root / "outputs" / "forecasting_results" / "figures"
 
 @app.route('/')
 def index():
@@ -215,6 +218,11 @@ def index():
 def thesis_figures():
     """Serve the thesis figures dashboard page."""
     return send_from_directory(str(frontend_path), 'thesis_figures.html')
+
+@app.route('/all-figures')
+def all_figures():
+    """Serve the combined figures dashboard page (thesis + optimization + forecasting)."""
+    return send_from_directory(str(frontend_path), 'all_figures.html')
 
 
 @app.route('/api/data/overview')
@@ -866,7 +874,7 @@ def forecast_non_shiftable():
 @app.route('/api/thesis/figures')
 def list_thesis_figures():
     """List all available thesis figures."""
-    figures_dir = project_root / "outputs" / "figures"
+    figures_dir = THESIS_FIGURES_DIR
     
     if not figures_dir.exists():
         return jsonify({
@@ -903,7 +911,7 @@ def list_thesis_figures():
 @app.route('/api/thesis/figures/<filename>')
 def get_thesis_figure(filename):
     """Serve a thesis figure image."""
-    figures_dir = project_root / "outputs" / "figures"
+    figures_dir = THESIS_FIGURES_DIR
     fig_path = figures_dir / filename
     
     if not fig_path.exists() or not fig_path.is_file():
@@ -915,6 +923,95 @@ def get_thesis_figure(filename):
         img_base64 = base64.b64encode(img_data).decode('utf-8')
     
     return jsonify({
+        'filename': filename,
+        'image': img_base64,
+        'format': 'png'
+    })
+
+
+@app.route('/api/figures')
+def list_all_figures():
+    """List all available figures across thesis, optimization, and forecasting outputs."""
+    catalogs = {
+        "thesis": {
+            "dir": THESIS_FIGURES_DIR,
+            "titles": {
+                'figure1_system_diagram.png': 'Figure 1 — System-level Relationship Diagram',
+                'figure2_timeseries_alignment.png': 'Figure 2 — Time-Series Alignment (Load, PV, Net Load)',
+                'figure3_pv_relationships.png': 'Figure 3 — PV Feature Relationships',
+                'figure4_load_by_family_type.png': 'Figure 4 — Load Behavior by Family Type',
+                'figure5_battery_operation_logic.png': 'Figure 5 — Battery Operation Logic',
+            },
+        },
+        "optimization": {
+            "dir": OPTIMIZATION_FIGURES_DIR,
+            "titles": {
+                'figure_O1_baseline_vs_optimized_load.png': 'Figure O1 — Baseline vs Optimized Load (Demand Response)',
+                'figure_O2_battery_operation_soc.png': 'Figure O2 — Battery Operation and SoC',
+                'figure_O3_grid_import_export.png': 'Figure O3 — Grid Interaction (Import/Export)',
+                'figure_O4_cost_comparison.png': 'Figure O4 — Cost Comparison (Baseline vs Optimized)',
+                'figure_O5_supply_breakdown_priority.png': 'Figure O5 — Supply Breakdown (Local → P2P → Grid)',
+            },
+        },
+        "forecasting": {
+            "dir": FORECASTING_FIGURES_DIR,
+            "titles": {
+                'forecast_visualization.png': 'Forecasting — True vs Predicted (Summer/Winter Weeks)',
+            },
+        },
+        "forecasting_results": {
+            "dir": FORECASTING_RESULTS_FIGURES_DIR,
+            "titles": {
+                'load_forecast_summer_week.png': 'Forecasting (Load) — Summer Week',
+                'load_forecast_winter_week.png': 'Forecasting (Load) — Winter Week',
+                'pv_forecast_summer_week.png': 'Forecasting (PV) — Summer Week',
+                'pv_forecast_winter_week.png': 'Forecasting (PV) — Winter Week',
+            },
+        },
+    }
+
+    figures = []
+    for category, meta in catalogs.items():
+        d = meta["dir"]
+        if not d.exists():
+            continue
+        for filename, title in meta["titles"].items():
+            fp = d / filename
+            if fp.exists() and fp.is_file():
+                figures.append({
+                    "category": category,
+                    "filename": filename,
+                    "title": title,
+                    "url": f"/api/figures/{category}/{filename}",
+                    "size": fp.stat().st_size,
+                })
+
+    figures.sort(key=lambda x: (x["category"], x["filename"]))
+    return jsonify({"available": True, "count": len(figures), "figures": figures})
+
+
+@app.route('/api/figures/<category>/<filename>')
+def get_any_figure(category, filename):
+    """Serve any figure image (base64) by category."""
+    dir_map = {
+        "thesis": THESIS_FIGURES_DIR,
+        "optimization": OPTIMIZATION_FIGURES_DIR,
+        "forecasting": FORECASTING_FIGURES_DIR,
+        "forecasting_results": FORECASTING_RESULTS_FIGURES_DIR,
+    }
+    if category not in dir_map:
+        return jsonify({'error': 'Unknown category'}), 404
+
+    figures_dir = dir_map[category]
+    fig_path = figures_dir / filename
+    if not fig_path.exists() or not fig_path.is_file():
+        return jsonify({'error': 'Figure not found'}), 404
+
+    with open(fig_path, 'rb') as f:
+        img_base64 = base64.b64encode(f.read()).decode('utf-8')
+
+    return jsonify({
+        'category': category,
         'filename': filename,
         'image': img_base64,
         'format': 'png'

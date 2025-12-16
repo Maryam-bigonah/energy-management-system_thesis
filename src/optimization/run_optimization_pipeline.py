@@ -432,8 +432,10 @@ def main():
     print(f"Days optimized: {len(all_kpis)}")
     if len(all_kpis) > 0:
         print(f"Average cost reduction: {kpis_df['cost_reduction_pct'].mean():.2f}%")
-        print(f"Average self-consumption rate: {kpis_df['self_consumption_rate'].mean():.2f}%")
-        print(f"Average self-sufficiency rate: {kpis_df['self_sufficiency_rate'].mean():.2f}%")
+        print(f"Average PV self-consumption (opt): {kpis_df['pv_self_consumption_rate_opt_pct'].mean():.2f}%")
+        print(f"Average PV self-sufficiency (opt): {kpis_df['pv_self_sufficiency_rate_opt_pct'].mean():.2f}%")
+        print(f"Average grid dependency ratio: {100*kpis_df['grid_dependency_ratio'].mean():.2f}%")
+        print(f"Comfort violations (total): {int(kpis_df['comfort_violations_count'].sum())}")
     
     print("\n✅ Optimization pipeline complete!")
 
